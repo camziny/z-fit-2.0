@@ -6,10 +6,9 @@ What it does
 - Supports barbell, dumbbell, kettlebell, cable, machine, and bodyweight exercises
 - Handles loading modes including bar, pair, and single, with clear per-implement instructions
 - Displays weighted and bodyweight variations, including assisted and bodyweight plus
-- Rounds pound units to the nearest 5 for practical gym use
 
 Tech overview
 - Expo Router and React Native UI
-- Convex for data storage, sessions, templates, and progression profiles
+- Convex
 - Clerk for authentication
 - Gluestack for theming and components
