@@ -148,6 +148,8 @@ export default function WorkoutsByBodyPartScreen() {
                       {template.items.map((item: any, index: number) => {
                         const ex = (exercises ?? []).find((e: any) => e._id === item.exerciseId);
                         const label = ex?.name || 'Exercise';
+                        const isSuperset = !!item.groupId;
+                        const supersetTag = isSuperset ? ` (Superset ${item.groupOrder || 1})` : '';
                         return (
                           <Text 
                             key={index} 
@@ -155,7 +157,7 @@ export default function WorkoutsByBodyPartScreen() {
                             color="$textLight300"
                             sx={{ _dark: { color: '$textDark300' } }}
                           >
-                            • {label} · {item.sets.length} sets
+                            • {label}{supersetTag} · {item.sets.length} sets
                           </Text>
                         );
                       })}

@@ -30,23 +30,11 @@ export default function HomeScreen() {
                 >
                   z-fit
                 </Text>
-                <VStack space="md" alignItems="center">
-                  <Text 
-                    size="xl" 
-                    color="$textLight200"
-                    sx={{ _dark: { color: '$textDark200' } }}
-                    textAlign="center"
-                    fontWeight="$light"
-                  >
-                    Simple. Focused. Effective.
-                  </Text>
-                </VStack>
               </VStack>
 
 
             </VStack>
 
-            {/* Action Buttons */}
             <VStack space="xl" width="100%">
               <Button 
                 bg="$primary0"

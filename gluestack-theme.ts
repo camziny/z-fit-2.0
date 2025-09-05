@@ -19,7 +19,6 @@ export const theme = createConfig({
     ...baseConfig.tokens,
     colors: {
       ...baseConfig.tokens.colors,
-      // Override default colors with our grayscale palette
       primary0: gray[800],
       primary50: gray[50],
       primary100: gray[100],
@@ -33,7 +32,6 @@ export const theme = createConfig({
       primary900: gray[800],
       primary950: gray[800],
       
-      // Background colors
       backgroundLight0: gray[50],
       backgroundLight50: gray[50],
       backgroundLight100: gray[100],
@@ -60,7 +58,6 @@ export const theme = createConfig({
       backgroundDark900: gray[50],
       backgroundDark950: gray[50],
 
-      // Text colors
       textLight0: gray[800],
       textLight50: gray[800],
       textLight100: gray[700],
@@ -87,7 +84,6 @@ export const theme = createConfig({
       textDark900: gray[800],
       textDark950: gray[800],
 
-      // Border colors
       borderLight0: gray[200],
       borderLight50: gray[200],
       borderLight100: gray[200],
@@ -100,11 +96,9 @@ export const theme = createConfig({
       borderDark200: gray[500],
       borderDark300: gray[400],
 
-      // Card colors
       cardLight: '#FFFFFF',
       cardDark: gray[700],
 
-      // Custom semantic colors
       surface: {
         light: gray[50],
         dark: gray[800],
@@ -218,7 +212,6 @@ export const theme = createConfig({
         default: '$primary0',
         _dark: '$textDark0',
       },
-      // Override default primary colors
       primary: {
         default: '$primary0',
         _dark: '$textDark0',

@@ -27,8 +27,9 @@ export const recordAssessment = mutation({
     unit: v.union(v.literal('kg'), v.literal('lbs')),
   },
   handler: async (ctx, { userId, anonKey, exerciseId, type, value, unit }) => {
+    const resolvedUserForAssessment = userId ?? (await resolveUserId(ctx as any));
     await ctx.db.insert('assessments', {
-      userId,
+      userId: resolvedUserForAssessment,
       anonKey,
       exerciseId,
       type,
@@ -44,13 +45,17 @@ export const getLatestAssessments = query({
   args: { userId: v.optional(v.id('users')), anonKey: v.optional(v.string()), exerciseIds: v.array(v.id('exercises')) },
   handler: async (ctx, { userId, anonKey, exerciseIds }) => {
     const result: Record<string, any> = {};
+    let effectiveUserId = userId;
+    if (!effectiveUserId && !anonKey) {
+      effectiveUserId = await resolveUserId(ctx as any);
+    }
     for (const exId of exerciseIds) {
       const items = await ctx.db
         .query('assessments')
         .withIndex('by_exercise_created', q => q.eq('exerciseId', exId))
         .collect();
       let filtered = items;
-      if (userId) filtered = filtered.filter(i => i.userId && i.userId === userId);
+      if (effectiveUserId) filtered = filtered.filter(i => i.userId && i.userId === effectiveUserId);
       else if (anonKey) filtered = filtered.filter(i => i.anonKey && i.anonKey === anonKey);
       const latest = filtered.reduce((acc, cur) => (acc && acc.createdAt > cur.createdAt ? acc : cur), undefined as any);
       if (latest) {
@@ -100,6 +105,8 @@ export const startFromTemplate = mutation({
             loadingMode: ex?.loadingMode,
             loadBasis: (ex?.isWeighted === false) ? 'bodyweight' : 'external',
             order: item.order,
+            groupId: item.groupId,
+            groupOrder: item.groupOrder,
             restSec: item.sets[0]?.restSec,
             rir: undefined,
             sets: item.sets.map((s: any) => ({ 
@@ -224,6 +231,68 @@ export const historyForUser = query({
       .query('sessions')
       .withIndex('by_user_started', q => q.eq('userId', userId))
       .collect();
+  },
+});
+
+
+export const getProgressionsForExercises = query({
+  args: { userId: v.optional(v.id('users')), exerciseIds: v.array(v.id('exercises')) },
+  handler: async (ctx, { userId, exerciseIds }) => {
+    const result: Record<string, any> = {};
+    const effectiveUserId = userId ?? (await resolveUserId(ctx as any));
+    if (!effectiveUserId) return result;
+    for (const exId of exerciseIds) {
+      const prof = await ctx.db
+        .query('progressionProfiles')
+        .withIndex('by_user_exercise', q => q.eq('userId', effectiveUserId).eq('exerciseId', exId))
+        .first();
+      if (prof) {
+        result[exId] = prof;
+      }
+    }
+    return result;
+  },
+});
+
+export const getLatestCompletedWeights = query({
+  args: { userId: v.optional(v.id('users')), anonKey: v.optional(v.string()), exerciseIds: v.array(v.id('exercises')) },
+  handler: async (ctx, { userId, anonKey, exerciseIds }) => {
+    const result: Record<string, number> = {};
+    const effectiveUserId = userId ?? (await resolveUserId(ctx as any));
+
+    let sessions: any[] = [];
+    if (effectiveUserId) {
+      const userSessions = await ctx.db
+        .query('sessions')
+        .withIndex('by_user_started', q => q.eq('userId', effectiveUserId))
+        .collect();
+      sessions = sessions.concat(userSessions);
+    }
+    if (anonKey) {
+      const anonSessions = await ctx.db
+        .query('sessions')
+        .withIndex('by_anon_started', q => q.eq('anonKey', anonKey))
+        .collect();
+      sessions = sessions.concat(anonSessions);
+    }
+
+    sessions.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+
+    for (const exId of exerciseIds) {
+      if (result[exId]) continue;
+      for (const s of sessions) {
+        const ex = (s.exercises || []).find((e: any) => e.exerciseId === exId);
+        if (!ex) continue;
+        const st = [...(ex.sets || [])].reverse().find((st: any) => st.completedWeight !== undefined || st.weight !== undefined);
+        const w = (st?.completedWeight ?? st?.weight) as number | undefined;
+        if (w !== undefined) {
+          result[exId] = w;
+          break;
+        }
+      }
+    }
+
+    return result;
   },
 });
 
