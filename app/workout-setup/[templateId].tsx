@@ -1,4 +1,5 @@
 import { api } from '@/convex/_generated/api';
+import { useAnonKey } from '@/hooks/useAnonKey';
 import { useWeightUnit } from '@/hooks/useWeightUnit';
 import { useUser } from '@clerk/clerk-expo';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
@@ -37,16 +38,30 @@ export default function WorkoutSetupScreen() {
   const templateParam = (params as any)?.templateId as string | string[] | undefined;
   const templateId = Array.isArray(templateParam) ? templateParam[0] : templateParam;
   const { user } = useUser();
+  const { anonKey: storedAnonKey, isLoaded: isAnonLoaded } = useAnonKey();
   const { weightUnit, convertWeight } = useWeightUnit();
   const template = useQuery(api.templates.getById, templateId ? { templateId } : 'skip');
   const exercises = useQuery(api.exercises.getMultiple, 
     template ? { exerciseIds: template.items.map(item => item.exerciseId) } : 'skip'
   );
-  const latestAssessments = useQuery(api.sessions.getLatestAssessments,
-    template && exercises ? { userId: undefined as any, exerciseIds: template.items.map(i => i.exerciseId) } : 'skip'
+  const progressions = useQuery(api.sessions.getProgressionsForExercises,
+    template ? { userId: undefined as any, exerciseIds: template.items.map(item => item.exerciseId) } : 'skip'
+  );
+  const latestCompleted = useQuery(
+    api.sessions.getLatestCompletedWeights,
+    template && (user || isAnonLoaded)
+      ? { userId: undefined as any, anonKey: user ? undefined : (storedAnonKey || undefined), exerciseIds: template.items.map(item => item.exerciseId) }
+      : 'skip'
+  );
+  const latestAssessments = useQuery(
+    api.sessions.getLatestAssessments,
+    template && exercises && (user || isAnonLoaded)
+      ? { userId: undefined as any, anonKey: user ? undefined : (storedAnonKey || undefined), exerciseIds: template.items.map(i => i.exerciseId) }
+      : 'skip'
   );
   const startFromTemplate = useMutation(api.sessions.startFromTemplate);
   const recordAssessment = useMutation(api.sessions.recordAssessment);
+  const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [assessmentData, setAssessmentData] = useState<Record<string, { value: number; type: '1rm' | 'working' }>>({});
@@ -147,10 +162,16 @@ export default function WorkoutSetupScreen() {
       
       // If this exercise was assessed directly
       const latest = (latestAssessments as any)?.[item.exerciseId];
-      if (assessedExercises.includes(item.exerciseId) || latest) {
+      const progression = (progressions as any)?.[item.exerciseId];
+      const lastCompletedKg = (latestCompleted as any)?.[item.exerciseId];
+      if (assessedExercises.includes(item.exerciseId) || latest || progression?.nextPlannedWeightKg !== undefined || lastCompletedKg !== undefined) {
         const data = assessedExercises.includes(item.exerciseId)
           ? assessmentData[item.exerciseId]
-          : { value: latest.value, type: latest.type };
+          : latest
+            ? { value: latest.value, type: latest.type }
+            : progression?.nextPlannedWeightKg !== undefined
+              ? { value: convertWeight(progression.nextPlannedWeightKg, 'kg', weightUnit), type: 'working' }
+              : { value: convertWeight(lastCompletedKg, 'kg', weightUnit), type: 'working' };
         suggestions[item.exerciseId] = calculateSuggestedWeight(data.value, data.type, avgReps, exMeta);
         return;
       }
@@ -193,6 +214,36 @@ export default function WorkoutSetupScreen() {
     return suggestions;
   };
 
+  useEffect(() => {
+    if (!currentQuestion) return;
+    if (currentAnswer && Number(currentAnswer.replace(/[^0-9.]/g, '')) > 0) return;
+    const latest = (latestAssessments as any)?.[currentQuestion.exercise._id];
+    const progression = (progressions as any)?.[currentQuestion.exercise._id];
+    const lastCompletedKg = (latestCompleted as any)?.[currentQuestion.exercise._id];
+    let baseValInCurrentUnit: number | undefined;
+    let baseType: '1rm' | 'working' | undefined;
+    if (latest) {
+      const baseUnit = (latest.unit as any) || weightUnit;
+      baseValInCurrentUnit = convertWeight(latest.value, baseUnit, weightUnit as any);
+      baseType = latest.type;
+    } else if (progression?.nextPlannedWeightKg !== undefined) {
+      baseValInCurrentUnit = convertWeight(progression.nextPlannedWeightKg, 'kg', weightUnit as any);
+      baseType = 'working';
+    } else if (lastCompletedKg !== undefined) {
+      baseValInCurrentUnit = convertWeight(lastCompletedKg, 'kg', weightUnit as any);
+      baseType = 'working';
+    }
+    if (baseValInCurrentUnit === undefined) return;
+    let prefFill = baseValInCurrentUnit;
+    if (currentQuestion.type === '1rm' && baseType === 'working') {
+      prefFill = baseValInCurrentUnit * (1 + 10 / 30);
+    } else if (currentQuestion.type === 'working' && baseType === '1rm') {
+      prefFill = baseValInCurrentUnit / (1 + 10 / 30);
+    }
+    const rounded = roundGym(prefFill, currentQuestion.exercise);
+    setCurrentAnswer(String(rounded));
+  }, [currentQuestion, latestAssessments, progressions, latestCompleted, weightUnit]);
+
   const onAnswerQuestion = () => {
     if (!currentQuestion || !currentAnswer) return;
     
@@ -209,6 +260,7 @@ export default function WorkoutSetupScreen() {
     // Persist assessment
     recordAssessment({
       userId: user ? undefined : undefined,
+      anonKey: user ? undefined : (storedAnonKey || undefined),
       exerciseId: currentQuestion.exercise._id,
       type: (dontKnow ? 'working' : currentQuestion.type) as any,
       value,
@@ -229,22 +281,28 @@ export default function WorkoutSetupScreen() {
   };
 
   const onStartWorkout = async () => {
-    if (!template) return;
+    if (!template || isStartingWorkout) return;
     
-    const weightsInKg: Record<string, number> = {};
-    Object.entries(plannedWeights).forEach(([exerciseId, weight]) => {
-      const rounded = roundGym(weight);
-      weightsInKg[exerciseId] = convertWeight(rounded, weightUnit, 'kg');
-    });
+    setIsStartingWorkout(true);
     
-    const sessionId = await startFromTemplate({ 
-      templateId: template._id,
-      userId: user ? undefined : undefined,
-      anonKey: user ? undefined : `anon-${Date.now()}`,
-      plannedWeights: weightsInKg,
-    });
-    
-    router.push(`/workout/${sessionId}`);
+    try {
+      const weightsInKg: Record<string, number> = {};
+      Object.entries(plannedWeights).forEach(([exerciseId, weight]) => {
+        const rounded = roundGym(weight);
+        weightsInKg[exerciseId] = convertWeight(rounded, weightUnit, 'kg');
+      });
+      
+      const sessionId = await startFromTemplate({ 
+        templateId: template._id,
+        userId: user ? undefined : undefined,
+        anonKey: user ? undefined : (storedAnonKey || undefined),
+        plannedWeights: weightsInKg,
+      });
+      
+      router.push(`/workout/${sessionId}`);
+    } catch (error) {
+      setIsStartingWorkout(false);
+    }
   };
   useEffect(() => {
     if (step !== 'assessment') return;
@@ -255,6 +313,22 @@ export default function WorkoutSetupScreen() {
       setStep('weights');
     }
   }, [step, template, exercises, assessmentQuestions]);
+
+  useEffect(() => {
+    if (step !== 'weights') return;
+    if (!template || !exercises) return;
+    const suggestions = estimateFromKeyExercises();
+    if (!suggestions || Object.keys(suggestions).length === 0) return;
+    setPlannedWeights((prev: Record<string, number>) => {
+      const next = { ...prev } as Record<string, number>;
+      template.items.forEach((item: any) => {
+        if (next[item.exerciseId] === undefined && suggestions[item.exerciseId] !== undefined) {
+          next[item.exerciseId] = suggestions[item.exerciseId];
+        }
+      });
+      return next;
+    });
+  }, [step, latestAssessments, progressions, latestCompleted, exercises, template, weightUnit]);
 
   if (!template) {
     return (
@@ -401,24 +475,58 @@ export default function WorkoutSetupScreen() {
                     >
                       {dontKnow ? `Working Weight (${weightUnit})` : `${currentQuestion.type === '1rm' ? '1RM' : 'Weight'} (${weightUnit})`}
                     </Text>
-                    <TextInput
-                      keyboardType="numeric"
-                      placeholder={weightUnit === 'kg' ? (dontKnow ? '60' : '80') : (dontKnow ? '135' : '175')}
-                      value={currentAnswer}
-                      onChangeText={setCurrentAnswer}
-                      style={{
-                        minWidth: 140,
-                        borderColor: '#CED4DA',
-                        borderWidth: 2,
-                        borderRadius: 16,
-                        paddingHorizontal: 20,
-                        paddingVertical: 16,
-                        fontSize: 24,
-                        fontWeight: '700',
-                        textAlign: 'center',
-                        backgroundColor: '#F8F9FA',
-                      }}
-                    />
+                    <HStack alignItems="center" space="sm">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        borderColor="$borderLight0"
+                        sx={{ _dark: { borderColor: '$borderDark0' } }}
+                        borderRadius={12}
+                        onPress={() => {
+                          const step = weightUnit === 'kg' ? 2.5 : 5;
+                          const num = Number((currentAnswer || '0').replace(/[^0-9.]/g, '')) || 0;
+                          const next = Math.max(0, num - step);
+                          const rounded = roundGym(next, currentQuestion.exercise);
+                          setCurrentAnswer(String(rounded));
+                        }}
+                      >
+                        <Text size="lg" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }}>−</Text>
+                      </Button>
+                      <TextInput
+                        keyboardType="numeric"
+                        placeholder={weightUnit === 'kg' ? (dontKnow ? '60' : '80') : (dontKnow ? '135' : '175')}
+                        value={currentAnswer}
+                        onChangeText={setCurrentAnswer}
+                        style={{
+                          minWidth: 140,
+                          borderColor: '#CED4DA',
+                          borderWidth: 2,
+                          borderRadius: 16,
+                          paddingHorizontal: 20,
+                          paddingVertical: 16,
+                          fontSize: 24,
+                          fontWeight: '700',
+                          textAlign: 'center',
+                          backgroundColor: '#F8F9FA',
+                        }}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        borderColor="$borderLight0"
+                        sx={{ _dark: { borderColor: '$borderDark0' } }}
+                        borderRadius={12}
+                        onPress={() => {
+                          const step = weightUnit === 'kg' ? 2.5 : 5;
+                          const num = Number((currentAnswer || '0').replace(/[^0-9.]/g, '')) || 0;
+                          const next = num + step;
+                          const rounded = roundGym(next, currentQuestion.exercise);
+                          setCurrentAnswer(String(rounded));
+                        }}
+                      >
+                        <Text size="lg" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }}>+</Text>
+                      </Button>
+                    </HStack>
                   </VStack>
 
                   <Button 
@@ -484,6 +592,7 @@ export default function WorkoutSetupScreen() {
               const ex = (exercises ?? []).find((e: any) => e._id === item.exerciseId);
               if (!ex?.isWeighted) return null;
               const exMeta = ex as any;
+              const isSuperset = !!item.groupId;
               
               return (
                 <Box
@@ -505,6 +614,17 @@ export default function WorkoutSetupScreen() {
                       >
                         {ex.name}
                       </Text>
+                      {isSuperset && (
+                        <Text 
+                          size="xs" 
+                          color="$textLight300"
+                          sx={{ _dark: { color: '$textDark300' } }}
+                          textTransform="uppercase"
+                          letterSpacing={1}
+                        >
+                          Superset {item.groupOrder || 1}
+                        </Text>
+                      )}
                       <Text 
                         size="sm" 
                         color="$textLight300"
@@ -523,28 +643,62 @@ export default function WorkoutSetupScreen() {
                       >
                         Weight ({weightUnit}):
                       </Text>
-                      <TextInput
-                        keyboardType="numeric"
-                        placeholder="0"
-                        value={String(plannedWeights[item.exerciseId] ?? '')}
-                        onChangeText={(t) => {
-                          const num = Number((t || '').replace(/[^0-9.]/g, ''));
-                          const rounded = roundGym(isNaN(num) ? 0 : num, exMeta);
-                          setPlannedWeights(prev => ({ ...prev, [item.exerciseId]: rounded }));
-                        }}
-                        style={{
-                          minWidth: 120,
-                          borderColor: '#CED4DA',
-                          borderWidth: 1,
-                          borderRadius: 12,
-                          paddingHorizontal: 16,
-                          paddingVertical: 12,
-                          fontSize: 16,
-                          fontWeight: '600',
-                          textAlign: 'center',
-                          backgroundColor: '#F8F9FA',
-                        }}
-                      />
+                      <HStack alignItems="center" space="sm">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          borderColor="$borderLight0"
+                          sx={{ _dark: { borderColor: '$borderDark0' } }}
+                          borderRadius={12}
+                          onPress={() => {
+                            const step = weightUnit === 'kg' ? 2.5 : 5;
+                            const cur = plannedWeights[item.exerciseId] ?? 0;
+                            const next = Math.max(0, cur - step);
+                            const rounded = roundGym(next, exMeta);
+                            setPlannedWeights(prev => ({ ...prev, [item.exerciseId]: rounded }));
+                          }}
+                        >
+                          <Text size="lg" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }}>−</Text>
+                        </Button>
+                        <TextInput
+                          keyboardType="numeric"
+                          placeholder="0"
+                          value={String(plannedWeights[item.exerciseId] ?? '')}
+                          onChangeText={(t) => {
+                            const num = Number((t || '').replace(/[^0-9.]/g, ''));
+                            const rounded = roundGym(isNaN(num) ? 0 : num, exMeta);
+                            setPlannedWeights(prev => ({ ...prev, [item.exerciseId]: rounded }));
+                          }}
+                          style={{
+                            minWidth: 120,
+                            borderColor: '#CED4DA',
+                            borderWidth: 1,
+                            borderRadius: 12,
+                            paddingHorizontal: 16,
+                            paddingVertical: 12,
+                            fontSize: 16,
+                            fontWeight: '600',
+                            textAlign: 'center',
+                            backgroundColor: '#F8F9FA',
+                          }}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          borderColor="$borderLight0"
+                          sx={{ _dark: { borderColor: '$borderDark0' } }}
+                          borderRadius={12}
+                          onPress={() => {
+                            const step = weightUnit === 'kg' ? 2.5 : 5;
+                            const cur = plannedWeights[item.exerciseId] ?? 0;
+                            const next = cur + step;
+                            const rounded = roundGym(next, exMeta);
+                            setPlannedWeights(prev => ({ ...prev, [item.exerciseId]: rounded }));
+                          }}
+                        >
+                          <Text size="lg" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }}>+</Text>
+                        </Button>
+                      </HStack>
                     </HStack>
 
                     <Button
@@ -622,8 +776,9 @@ export default function WorkoutSetupScreen() {
             
             <Button 
               bg="$primary0"
-              sx={{ _dark: { bg: '$textDark0' } }}
+              sx={{ _dark: { bg: '$textDark0' }, opacity: isStartingWorkout ? 0.7 : 1 }}
               onPress={onStartWorkout}
+              isDisabled={isStartingWorkout}
               borderRadius={16}
               h={56}
               px={24}
@@ -634,7 +789,7 @@ export default function WorkoutSetupScreen() {
                 fontWeight="$semibold"
                 size="lg"
               >
-                Start Workout
+                {isStartingWorkout ? 'Starting...' : 'Start Workout'}
               </Text>
             </Button>
           </HStack>

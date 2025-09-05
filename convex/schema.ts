@@ -46,6 +46,8 @@ export default defineSchema({
         sets: v.array(
           v.object({ reps: v.number(), weight: v.optional(v.number()), restSec: v.optional(v.number()) })
         ),
+        groupId: v.optional(v.string()),
+        groupOrder: v.optional(v.number()),
       })
     ),
     createdAt: v.number(),
@@ -84,6 +86,8 @@ export default defineSchema({
         order: v.number(),
         restSec: v.optional(v.number()),
         rir: v.optional(v.number()),
+        groupId: v.optional(v.string()),
+        groupOrder: v.optional(v.number()),
         sets: v.array(
           v.object({
             reps: v.number(),

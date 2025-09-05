@@ -5,9 +5,17 @@ type Props = {
   cardSuccessOpacity: SharedValue<number>;
   successCheckScale: SharedValue<number>;
   successCheckOpacity: SharedValue<number>;
+  isExerciseComplete?: boolean;
+  exerciseName?: string;
 };
 
-export default function SetSuccessOverlay({ cardSuccessOpacity, successCheckScale, successCheckOpacity }: Props) {
+export default function SetSuccessOverlay({ 
+  cardSuccessOpacity, 
+  successCheckScale, 
+  successCheckOpacity, 
+  isExerciseComplete = false,
+  exerciseName
+}: Props) {
   const containerStyle = useAnimatedStyle(() => {
     return { opacity: cardSuccessOpacity.value };
   });
@@ -68,16 +76,30 @@ export default function SetSuccessOverlay({ cardSuccessOpacity, successCheckScal
                 ✓
               </Text>
             </Box>
-            <Text
-              color="$backgroundLight0"
-              sx={{ _dark: { color: '$backgroundDark0' } }}
-              fontWeight="$bold"
-              size="xl"
-              textAlign="center"
-              letterSpacing={0.5}
-            >
-              Set Complete
-            </Text>
+            <VStack alignItems="center" space="xs">
+              <Text
+                color="$backgroundLight0"
+                sx={{ _dark: { color: '$backgroundDark0' } }}
+                fontWeight="$bold"
+                size="xl"
+                textAlign="center"
+                letterSpacing={0.5}
+              >
+                {isExerciseComplete ? 'Exercise Complete!' : 'Set Complete'}
+              </Text>
+              {isExerciseComplete && exerciseName && (
+                <Text
+                  color="$backgroundLight100"
+                  sx={{ _dark: { color: '$backgroundDark100' } }}
+                  fontWeight="$medium"
+                  size="sm"
+                  textAlign="center"
+                  opacity={0.9}
+                >
+                  {exerciseName}
+                </Text>
+              )}
+            </VStack>
           </VStack>
         </Animated.View>
       </Box>
