@@ -204,10 +204,6 @@ export default function WorkoutSetupScreen() {
         const adjustedBase = baseData.value * multiplier;
         const estimatedWeight = calculateSuggestedWeight(adjustedBase, baseData.type, avgReps, exMeta);
         suggestions[item.exerciseId] = estimatedWeight;
-      } else {
-        // Fallback: use a conservative estimate
-        const fallbackWeight = roundGym(weightUnit === 'kg' ? 20 : 45, exMeta);
-        suggestions[item.exerciseId] = fallbackWeight;
       }
     });
     
@@ -552,6 +548,20 @@ export default function WorkoutSetupScreen() {
                       {isLastQuestion ? 'Generate Workout Plan' : 'Next Question'}
                     </Text>
                   </Button>
+
+                  <Button 
+                    variant="link"
+                    size="sm"
+                    onPress={() => {
+                      const suggestions = estimateFromKeyExercises();
+                      setPlannedWeights(suggestions);
+                      setStep('weights');
+                    }}
+                  >
+                    <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
+                      Skip assessment for now
+                    </Text>
+                  </Button>
                 </VStack>
               </VStack>
             </Box>
@@ -665,9 +675,16 @@ export default function WorkoutSetupScreen() {
                           placeholder="0"
                           value={String(plannedWeights[item.exerciseId] ?? '')}
                           onChangeText={(t) => {
-                            const num = Number((t || '').replace(/[^0-9.]/g, ''));
-                            const rounded = roundGym(isNaN(num) ? 0 : num, exMeta);
-                            setPlannedWeights(prev => ({ ...prev, [item.exerciseId]: rounded }));
+                            const cleaned = (t || '').replace(/[^0-9.]/g, '');
+                            if (cleaned === '') {
+                              setPlannedWeights(prev => {
+                                const { [item.exerciseId]: _omit, ...rest } = prev as any;
+                                return rest as any;
+                              });
+                              return;
+                            }
+                            const num = Number(cleaned);
+                            setPlannedWeights(prev => ({ ...prev, [item.exerciseId]: isNaN(num) ? 0 : num }));
                           }}
                           style={{
                             minWidth: 120,

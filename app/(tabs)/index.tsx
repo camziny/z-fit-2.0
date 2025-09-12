@@ -1,12 +1,18 @@
+import { useThemeMode } from '@/hooks/useThemeMode';
 import { useUser } from '@clerk/clerk-expo';
 import { Box, Button, Text, VStack } from '@gluestack-ui/themed';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { Dimensions, ScrollView, StyleSheet } from 'react-native';
 
 const { height, width } = Dimensions.get('window');
 
 export default function HomeScreen() {
-  const { isSignedIn, user } = useUser();
+  const { isSignedIn } = useUser();
+  const { effectiveColorScheme } = useThemeMode();
+  const logoSource = effectiveColorScheme === 'dark'
+    ? require('../../assets/images/logo_dark.png')
+    : require('../../assets/images/logo_light.png');
 
   return (
     <Box 
@@ -18,18 +24,13 @@ export default function HomeScreen() {
         <VStack flex={1} justifyContent="center" alignItems="center" p={32} minHeight={height * 0.85}>
           <VStack space="3xl" alignItems="center" maxWidth={Math.min(360, width - 64)} width="100%">
             
-            {/* Hero Section */}
             <VStack space="2xl" alignItems="center">
               <VStack space="xl" alignItems="center">
-                <Text 
-                  size="5xl" 
-                  fontWeight="$bold" 
-                  color="$textLight0"
-                  sx={{ _dark: { color: '$textDark0' } }}
-                  textAlign="center"
-                >
-                  z-fit
-                </Text>
+                <Image 
+                  source={logoSource}
+                  style={{ width: Math.min(320, width - 64), height: 72 }}
+                  contentFit="contain"
+                />
               </VStack>
 
 
@@ -80,15 +81,6 @@ export default function HomeScreen() {
                       Sign In to Track Progress
                     </Text>
                   </Button>
-                  <Text 
-                    size="xs" 
-                    color="$textLight300"
-                    sx={{ _dark: { color: '$textDark300' } }}
-                    textAlign="center"
-                    opacity={0.8}
-                  >
-                    No registration required to start
-                  </Text>
                 </VStack>
               ) : (
                 <Button 
