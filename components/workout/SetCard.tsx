@@ -86,7 +86,9 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
             color="$textLight200"
             sx={{ _dark: { color: '$textDark200' } }}
           >
-            {currentExercise?.loadBasis === 'assisted' ? 'Assisted Bodyweight' : 'Bodyweight'}
+            {currentExercise?.loadBasis === 'external'
+              ? `${Math.round(100 / (1 + ((currentSet?.reps ?? 10) / 30)))}% of 1RM`
+              : (currentExercise?.loadBasis === 'assisted' ? 'Assisted Bodyweight' : 'Bodyweight')}
           </Text>
         )}
         <Text
@@ -100,7 +102,9 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
             ? ((currentExercise as any)?.loadingMode === 'pair'
                 ? (currentExercise?.equipment === 'kettlebell' ? 'Per Kettlebell' : 'Per Dumbbell')
                 : (currentExercise?.loadingMode === 'bar' ? 'Barbell Load' : 'Target Weight'))
-            : (currentExercise?.loadBasis === 'assisted' ? 'Assistance' : 'No Weight')}
+            : (currentExercise?.loadBasis === 'external'
+                ? 'Percent of 1RM'
+                : (currentExercise?.loadBasis === 'assisted' ? 'Assistance' : 'No Weight'))}
         </Text>
 
         {currentSet?.weight && (
