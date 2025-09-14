@@ -1,3 +1,5 @@
+import { Colors } from '@/constants/Colors';
+import { useThemeMode } from '@/hooks/useThemeMode';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
 import { useMemo } from 'react';
@@ -43,6 +45,7 @@ export default function HeaderProgress({
   restRemainingSec,
   onSkipRest
 }: Props) {
+  const { effectiveColorScheme } = useThemeMode();
   const currentExercise = exercises[currentExerciseIndex];
   const currentSet = currentExercise?.sets[currentSetIndex];
   const isCurrentSetCompleted = !!currentSet?.done;
@@ -127,7 +130,7 @@ export default function HeaderProgress({
               <Ionicons 
                 name="time" 
                 size={18} 
-                color={restEnabled ? '#FFFFFF' : '#000000'}
+                color={restEnabled ? '#FFFFFF' : Colors[effectiveColorScheme ?? 'light'].icon}
               />
             </Box>
           </TouchableOpacity>
@@ -146,7 +149,7 @@ export default function HeaderProgress({
               <Ionicons 
                 name="menu" 
                 size={18} 
-                color="#000000"
+                color={Colors[effectiveColorScheme ?? 'light'].icon}
               />
             </Box>
           </TouchableOpacity>
@@ -215,7 +218,7 @@ export default function HeaderProgress({
                 <Ionicons 
                   name="checkmark" 
                   size={8} 
-                  color="#FFFFFF"
+                  color={effectiveColorScheme === 'dark' ? '#212529' : '#FFFFFF'}
                 />
               ) : (
                 <Box

@@ -77,14 +77,25 @@ export default function WorkoutRoadmapModal({ visible, exercises, currentExercis
                   >
                     <HStack justifyContent="space-between" alignItems="center">
                       <VStack space="xs">
-                        <Text
-                          size="sm"
-                          fontWeight="$semibold"
-                          color={isActive ? '$backgroundLight0' : '$textLight0'}
-                          sx={isActive ? { _dark: { color: '$backgroundDark0' } } : { _dark: { color: '$textDark0' } }}
-                        >
-                          {ex.exerciseName || `Exercise ${idx + 1}`}
-                        </Text>
+                        <HStack alignItems="center" space="xs">
+                          {(ex as any).groupId && (
+                            <Text
+                              size="xs"
+                              color={isActive ? '$backgroundLight0' : '$primary0'}
+                              sx={isActive ? { _dark: { color: '$backgroundDark0' } } : { _dark: { color: '$textDark0' } }}
+                            >
+                              🔗
+                            </Text>
+                          )}
+                          <Text
+                            size="sm"
+                            fontWeight="$semibold"
+                            color={isActive ? '$backgroundLight0' : '$textLight0'}
+                            sx={isActive ? { _dark: { color: '$backgroundDark0' } } : { _dark: { color: '$textDark0' } }}
+                          >
+                            {ex.exerciseName || `Exercise ${idx + 1}`}
+                          </Text>
+                        </HStack>
                         <Text
                           size="xs"
                           color={isActive ? '$backgroundLight100' : '$textLight300'}

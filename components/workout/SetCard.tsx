@@ -11,15 +11,22 @@ type Props = {
 };
 
 export default function SetCard({ currentExercise, currentSet, currentSetIndex, formatWeight, convertWeight, weightUnit }: Props) {
+  const isSuperset = !!(currentExercise as any)?.groupId;
+  
   return (
     <VStack alignItems="center" space="lg">
       <Box
-        bg="$backgroundLight0"
-        sx={{ _dark: { bg: '$backgroundDark0' } }}
+        bg={isSuperset ? "$primary50" : "$backgroundLight0"}
+        sx={isSuperset ? { _dark: { bg: '$backgroundDark50' } } : { _dark: { bg: '$backgroundDark0' } }}
         borderRadius={16}
         p={24}
         w="100%"
         alignItems="center"
+        borderWidth={isSuperset ? 1 : 0}
+        borderColor={isSuperset ? "$primary200" : "transparent"}
+        sx={{
+          ...((isSuperset ? { _dark: { bg: '$backgroundDark50', borderColor: '$primary600' } } : { _dark: { bg: '$backgroundDark0' } }))
+        }}
       >
         <VStack alignItems="center" space="sm">
           <Box

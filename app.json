@@ -2,23 +2,23 @@
   "expo": {
     "name": "z-fit",
     "slug": "z-fit",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/logo_dark.png",
     "scheme": "zfit20",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.zfit",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/logo_dark.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true

@@ -4,11 +4,40 @@ import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
 import { useQuery } from 'convex/react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet } from 'react-native';
+import { useMemo } from 'react';
 
 export default function WorkoutsByBodyPartScreen() {
   const { bodyPart } = useLocalSearchParams<{ bodyPart: string }>();
-  const templates = useQuery(api.templates.byBodyPart, bodyPart ? { bodyPart } : 'skip');
-  const exercises = useQuery(api.exercises.byBodyPart, bodyPart ? { bodyPart } : 'skip');
+  const effectiveBodyPart = useMemo(() => {
+    if (!bodyPart) return undefined;
+    if (bodyPart === 'push') return 'chest';
+    if (bodyPart === 'pull') return 'back';
+    return bodyPart;
+  }, [bodyPart]);
+
+  const allTemplates = useQuery(api.templates.byBodyPart, effectiveBodyPart ? { bodyPart: effectiveBodyPart } : 'skip');
+  const templates = useMemo(() => {
+    if (!allTemplates) return allTemplates as any;
+    if (bodyPart === 'push') {
+      return (allTemplates as any[]).filter(t =>
+        /push/i.test(String(t.name || '')) || /push/i.test(String(t.variation || ''))
+      );
+    }
+    if (bodyPart === 'pull') {
+      return (allTemplates as any[]).filter(t =>
+        /pull/i.test(String(t.name || '')) || /pull/i.test(String(t.variation || ''))
+      );
+    }
+    return allTemplates as any;
+  }, [allTemplates, bodyPart]);
+  const exerciseIds = useMemo(() => {
+    const ids = new Set<string>();
+    (templates ?? []).forEach((t: any) => {
+      (t.items || []).forEach((it: any) => ids.add(it.exerciseId));
+    });
+    return Array.from(ids);
+  }, [templates]);
+  const exercises = useQuery(api.exercises.getMultiple, exerciseIds.length ? { exerciseIds: exerciseIds as any } : 'skip');
   
   const onStartSetup = (template: any) => {
     router.push(`/workout-setup/${template._id}`);

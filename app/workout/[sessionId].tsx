@@ -1,4 +1,5 @@
 import { api } from '@/convex/_generated/api';
+import { useWorkoutLiveActivity } from '@/hooks/useLiveActivity';
 import { useWeightUnit } from '@/hooks/useWeightUnit';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
 import { useMutation, useQuery } from 'convex/react';
@@ -7,19 +8,19 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming
 } from 'react-native-reanimated';
 
 import {
-  HeaderProgress,
-  RestCompleteOverlay,
-  SetCard,
-  SetSuccessOverlay,
-  WorkoutCompleteOverlay,
-  WorkoutRoadmapModal,
+    HeaderProgress,
+    RestCompleteOverlay,
+    SetCard,
+    SetSuccessOverlay,
+    WorkoutCompleteOverlay,
+    WorkoutRoadmapModal,
 } from '@/components/workout';
 import type { Id } from '@/convex/_generated/dataModel';
 
@@ -29,6 +30,7 @@ export default function WorkoutSessionScreen() {
   const session = useQuery(api.sessions.getSession, sessionId ? { sessionId } : 'skip');
   const markSetDone = useMutation(api.sessions.markSetDone);
   const completeSession = useMutation(api.sessions.completeSession);
+  const updatePlannedWeight = useMutation(api.sessions.updatePlannedWeight);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [currentSetIndex, setCurrentSetIndex] = useState(0);
   const [restEnabled, setRestEnabled] = useState(false);
@@ -40,6 +42,7 @@ export default function WorkoutSessionScreen() {
   const [isWorkoutOverlayActive, setIsWorkoutOverlayActive] = useState(false);
   const [overlayExerciseComplete, setOverlayExerciseComplete] = useState(false);
   const [overlayExerciseName, setOverlayExerciseName] = useState<string>('');
+  const [liveActivityId, setLiveActivityId] = useState<string | null>(null);
   
 
   const buttonScale = useSharedValue(1);
@@ -58,6 +61,7 @@ export default function WorkoutSessionScreen() {
   const restCompleteScale = useSharedValue(0.5);
 
   const recordRir = useMutation(api.sessions.recordExerciseRIR);
+  const { startWorkoutActivity, updateWorkoutActivity, endWorkoutActivity } = useWorkoutLiveActivity();
 
   const handleRirSelect = async (exerciseIndex: number, rir: number) => {
     try {
@@ -90,6 +94,12 @@ export default function WorkoutSessionScreen() {
     workoutCompleteScale.value = withSpring(1, { damping: 12, stiffness: 200 });
     celebrationScale.value = withTiming(0.5, { duration: 300 });
     setIsWorkoutOverlayActive(false);
+    
+    // End Live Activity
+    if (liveActivityId) {
+      await endWorkoutActivity(liveActivityId);
+      setLiveActivityId(null);
+    }
     
     await completeSession({ sessionId: sessionId as Id<'sessions'> });
     router.replace('/(tabs)');
@@ -135,7 +145,7 @@ export default function WorkoutSessionScreen() {
     progressWidth.value = withTiming(newProgress, { duration: 600 });
     
     try {
-      await markSetDone({ sessionId: sessionId as Id<'sessions'>, exerciseIndex: currentExerciseIndex, setIndex: currentSetIndex });
+      await markSetDone({ sessionId: sessionId as Id<'sessions'>, exerciseIndex: currentExerciseIndex, setIndex: currentSetIndex, weight: currentSet?.weight });
       
               setTimeout(() => {
         cardSuccessOpacity.value = withTiming(0, { duration: 100 });
@@ -267,6 +277,98 @@ export default function WorkoutSessionScreen() {
     progressWidth.value = withTiming(overallPercent, { duration: 300 });
   }, [overallPercent, progressWidth]);
 
+  // Start Live Activity when workout begins
+  useEffect(() => {
+    if (!session || !session.exercises.length || liveActivityId) return;
+    
+    const startLiveActivity = async () => {
+      const currentExercise = session.exercises[currentExerciseIndex];
+      const currentSet = currentExercise?.sets[currentSetIndex];
+      
+      if (!currentExercise || !currentSet) return;
+      
+      const weightDisplay = currentSet.weight ? 
+        (() => {
+          const isPair = currentExercise.loadingMode === 'pair';
+          const converted = convertWeight(currentSet.weight, 'kg', weightUnit);
+          if (isPair) {
+            const per = converted / 2;
+            return `${formatWeight(per)} each`;
+          }
+          return formatWeight(converted);
+        })() : undefined;
+
+      const activityId = await startWorkoutActivity({
+        exerciseName: currentExercise.exerciseName || `Exercise ${currentExerciseIndex + 1}`,
+        currentSet: currentSetIndex + 1,
+        totalSets: currentExercise.sets.length,
+        reps: currentSet.reps,
+        weight: weightDisplay,
+        restTimeRemaining: restRemainingSec || undefined,
+        restEnabled,
+        isSuperset: !!currentExercise.groupId,
+        supersetInfo: currentExercise.groupId ? 
+          (() => {
+            const groupMembers = session.exercises
+              .filter((ex: any) => ex.groupId === currentExercise.groupId)
+              .sort((a: any, b: any) => (a.groupOrder || 0) - (b.groupOrder || 0));
+            const currentGroupIndex = groupMembers.findIndex(ex => ex.exerciseName === currentExercise.exerciseName);
+            return `${currentGroupIndex + 1}/${groupMembers.length}`;
+          })() : undefined,
+      });
+      
+      if (activityId) {
+        setLiveActivityId(activityId);
+      }
+    };
+    
+    startLiveActivity();
+  }, [session, liveActivityId, currentExerciseIndex, currentSetIndex, convertWeight, formatWeight, restRemainingSec, restEnabled, startWorkoutActivity, weightUnit]);
+
+  // Update Live Activity when workout state changes
+  useEffect(() => {
+    if (!session || !liveActivityId) return;
+    
+    const updateLiveActivity = async () => {
+      const currentExercise = session.exercises[currentExerciseIndex];
+      const currentSet = currentExercise?.sets[currentSetIndex];
+      
+      if (!currentExercise || !currentSet) return;
+      
+      const weightDisplay = currentSet.weight ? 
+        (() => {
+          const isPair = currentExercise.loadingMode === 'pair';
+          const converted = convertWeight(currentSet.weight, 'kg', weightUnit);
+          if (isPair) {
+            const per = converted / 2;
+            return `${formatWeight(per)} each`;
+          }
+          return formatWeight(converted);
+        })() : undefined;
+
+      await updateWorkoutActivity(liveActivityId, {
+        exerciseName: currentExercise.exerciseName || `Exercise ${currentExerciseIndex + 1}`,
+        currentSet: currentSetIndex + 1,
+        totalSets: currentExercise.sets.length,
+        reps: currentSet.reps,
+        weight: weightDisplay,
+        restTimeRemaining: restRemainingSec || undefined,
+        restEnabled,
+        isSuperset: !!currentExercise.groupId,
+        supersetInfo: currentExercise.groupId ? 
+          (() => {
+            const groupMembers = session.exercises
+              .filter((ex: any) => ex.groupId === currentExercise.groupId)
+              .sort((a: any, b: any) => (a.groupOrder || 0) - (b.groupOrder || 0));
+            const currentGroupIndex = groupMembers.findIndex(ex => ex.exerciseName === currentExercise.exerciseName);
+            return `${currentGroupIndex + 1}/${groupMembers.length}`;
+          })() : undefined,
+      });
+    };
+    
+    updateLiveActivity();
+  }, [session, liveActivityId, currentExerciseIndex, currentSetIndex, restRemainingSec, restEnabled, weightUnit, convertWeight, formatWeight, updateWorkoutActivity]);
+
 
   const buttonAnimatedStyle = useAnimatedStyle(() => {
     return {
@@ -341,9 +443,9 @@ export default function WorkoutSessionScreen() {
           <Box position="relative">
               <Box
                 bg="$cardLight"
-                sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
-                borderColor="$borderLight0"
-                borderWidth={1}
+                sx={{ _dark: { bg: '$cardDark', borderColor: currentExercise?.groupId ? '$primary0' : '$borderDark0' } }}
+                borderColor={currentExercise?.groupId ? '$primary0' : '$borderLight0'}
+                borderWidth={currentExercise?.groupId ? 2 : 1}
                 borderRadius={20}
                 p={32}
                 alignItems="center"
@@ -359,17 +461,56 @@ export default function WorkoutSessionScreen() {
                 >
                   {currentExercise?.exerciseName || `Exercise ${currentExerciseIndex + 1}`}
                 </Text>
-                {!!currentExercise?.groupId && (
-                  <Text 
-                    size="xs" 
-                    color="$textLight300"
-                    sx={{ _dark: { color: '$textDark300' } }}
-                    textTransform="uppercase"
-                    letterSpacing={1}
-                  >
-                    Superset {currentExercise.groupOrder || 1}
-                  </Text>
-                )}
+                {!!currentExercise?.groupId && (() => {
+                  const groupMembers = session!.exercises
+                    .filter((ex: any) => ex.groupId === currentExercise.groupId)
+                    .sort((a: any, b: any) => (a.groupOrder || 0) - (b.groupOrder || 0));
+                  const currentGroupIndex = groupMembers.findIndex(ex => ex.exerciseName === currentExercise.exerciseName);
+                  const nextInGroup = groupMembers[(currentGroupIndex + 1) % groupMembers.length];
+                  
+                  return (
+                    <VStack alignItems="center" space="xs">
+                      <Box
+                        bg="$primary0"
+                        sx={{ _dark: { bg: '$textDark0' } }}
+                        borderRadius={12}
+                        px={16}
+                        py={8}
+                      >
+                        <HStack alignItems="center" space="sm">
+                          <Text 
+                            size="xs" 
+                            color="$backgroundLight0"
+                            sx={{ _dark: { color: '$backgroundDark0' } }}
+                            fontWeight="$bold"
+                            textTransform="uppercase"
+                            letterSpacing={1}
+                          >
+                            🔗 SUPERSET
+                          </Text>
+                          <Text 
+                            size="xs" 
+                            color="$backgroundLight0"
+                            sx={{ _dark: { color: '$backgroundDark0' } }}
+                            fontWeight="$bold"
+                          >
+                            {currentGroupIndex + 1}/{groupMembers.length}
+                          </Text>
+                        </HStack>
+                      </Box>
+                      {nextInGroup && nextInGroup.exerciseName !== currentExercise.exerciseName && (
+                        <Text 
+                          size="xs" 
+                          color="$textLight300"
+                          sx={{ _dark: { color: '$textDark300' } }}
+                          textAlign="center"
+                        >
+                          Next: {nextInGroup.exerciseName}
+                        </Text>
+                      )}
+                    </VStack>
+                  );
+                })()}
                 
               </VStack>
 
@@ -381,6 +522,77 @@ export default function WorkoutSessionScreen() {
                 convertWeight={convertWeight}
                 weightUnit={weightUnit}
               />
+
+              {currentExercise?.loadBasis === 'external' && (
+                <Box w="100%" mt={8}>
+                  <VStack space="sm" alignItems="center">
+                    <Text 
+                      size="xs" 
+                      color="$textLight300"
+                      sx={{ _dark: { color: '$textDark300' } }}
+                      textTransform="uppercase"
+                      letterSpacing={1}
+                    >
+                      Adjust Weight (applies to remaining sets)
+                    </Text>
+                    <HStack alignItems="center" space="md">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        borderColor="$borderLight0"
+                        sx={{ _dark: { borderColor: '$borderDark0' } }}
+                        borderRadius={12}
+                        onPress={async () => {
+                          const step = weightUnit === 'kg' ? 2.5 : 5;
+                          const currentDisplay = convertWeight(currentSet?.weight || 0, 'kg', weightUnit);
+                          const nextDisplay = Math.max(0, currentDisplay - step);
+                          const nextKg = convertWeight(nextDisplay, weightUnit, 'kg');
+                          await updatePlannedWeight({ sessionId: sessionId as Id<'sessions'>, exerciseIndex: currentExerciseIndex, fromSetIndex: currentSetIndex, weightKg: nextKg });
+                        }}
+                      >
+                        <Text size="lg" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }}>−</Text>
+                      </Button>
+                      <VStack alignItems="center" space="xs">
+                        <Text 
+                          size="xl" 
+                          fontWeight="$semibold" 
+                          color="$textLight0"
+                          sx={{ _dark: { color: '$textDark0' } }}
+                        >
+                          {(() => {
+                            const isPair = currentExercise?.loadingMode === 'pair';
+                            const converted = convertWeight(currentSet?.weight || 0, 'kg', weightUnit);
+                            if (isPair) {
+                              const per = converted / 2;
+                              return `${formatWeight(per)} each`;
+                            }
+                            return formatWeight(converted);
+                          })()}
+                        </Text>
+                        <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
+                          {weightUnit}
+                        </Text>
+                      </VStack>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        borderColor="$borderLight0"
+                        sx={{ _dark: { borderColor: '$borderDark0' } }}
+                        borderRadius={12}
+                        onPress={async () => {
+                          const step = weightUnit === 'kg' ? 2.5 : 5;
+                          const currentDisplay = convertWeight(currentSet?.weight || 0, 'kg', weightUnit);
+                          const nextDisplay = currentDisplay + step;
+                          const nextKg = convertWeight(nextDisplay, weightUnit, 'kg');
+                          await updatePlannedWeight({ sessionId: sessionId as Id<'sessions'>, exerciseIndex: currentExerciseIndex, fromSetIndex: currentSetIndex, weightKg: nextKg });
+                        }}
+                      >
+                        <Text size="lg" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }}>+</Text>
+                      </Button>
+                    </HStack>
+                  </VStack>
+                </Box>
+              )}
 
               {restRemainingSec !== null && (
                 <Box
