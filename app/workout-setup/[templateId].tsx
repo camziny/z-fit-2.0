@@ -71,48 +71,25 @@ export default function WorkoutSetupScreen() {
 
   const assessmentQuestions = useMemo(() => {
     if (!template || !exercises) return [];
-    
-    const weightedExercises = exercises.filter((ex: any) => ex.isWeighted);
-    const bodyPartKeys = keyExercisesByBodyPart[template.bodyPart] || { press: [], pull: [] };
+    const itemsSorted = [...(template.items || [])].sort((a: any, b: any) => a.order - b.order);
+    const weightedByOrder = itemsSorted
+      .map((it: any) => (exercises as any[]).find((ex: any) => ex._id === it.exerciseId))
+      .filter((ex: any) => ex && ex.isWeighted);
     const questions: Array<{ exercise: any; type: '1rm' | 'working'; question: string }> = [];
-    
-    // Find key exercises in this workout
-    const pressExercise = weightedExercises.find(ex => 
-      bodyPartKeys.press?.some(name => ex.name.includes(name.split(' ')[0]))
-    );
-    const pullExercise = weightedExercises.find(ex => 
-      bodyPartKeys.pull?.some(name => ex.name.includes(name.split(' ')[0]))
-    );
-    
-    if (pressExercise) {
-      questions.push({
-        exercise: pressExercise,
-        type: '1rm',
-        question: `If you had to do 1 rep max on ${pressExercise.name.toLowerCase()}, how much do you think you could do?`
-      });
-    }
-    
-    if (pullExercise && pullExercise._id !== pressExercise?._id) {
-      questions.push({
-        exercise: pullExercise,
-        type: '1rm', 
-        question: `If you had to do 1 rep max on ${pullExercise.name.toLowerCase()}, how much do you think you could do?`
-      });
-    }
-    
-    // Add working weight questions for other exercises
-    const remainingExercises = weightedExercises.filter(ex => 
-      ex._id !== pressExercise?._id && ex._id !== pullExercise?._id
-    );
-    
-    remainingExercises.forEach(ex => {
+    if (weightedByOrder.length === 0) return questions;
+    const primary = weightedByOrder[0];
+    questions.push({
+      exercise: primary,
+      type: '1rm',
+      question: `If you had to do 1 rep max on ${primary.name.toLowerCase()}, how much do you think you could do?`
+    });
+    weightedByOrder.slice(1).forEach((ex: any) => {
       questions.push({
         exercise: ex,
         type: 'working',
         question: `For ${ex.name.toLowerCase()}, what weight would you typically use for a moderate set?`
       });
     });
-    
     return questions;
   }, [template, exercises]);
 

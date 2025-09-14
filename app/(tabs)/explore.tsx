@@ -3,6 +3,8 @@ import { router } from 'expo-router';
 import { ScrollView, StyleSheet } from 'react-native';
 
 const workoutCategories = [
+  { name: 'Push', bodyPart: 'push' },
+  { name: 'Pull', bodyPart: 'pull' },
   { name: 'Legs', bodyPart: 'legs' },
   { name: 'Chest', bodyPart: 'chest' },
   { name: 'Back', bodyPart: 'back' },

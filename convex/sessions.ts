@@ -149,6 +149,29 @@ export const markSetDone = mutation({
   },
 });
 
+export const updatePlannedWeight = mutation({
+  args: {
+    sessionId: v.id('sessions'),
+    exerciseIndex: v.number(),
+    fromSetIndex: v.optional(v.number()),
+    weightKg: v.number(),
+  },
+  handler: async (ctx, { sessionId, exerciseIndex, fromSetIndex, weightKg }) => {
+    const s = await ctx.db.get(sessionId);
+    if (!s) throw new Error('Session not found');
+    const ex = s.exercises[exerciseIndex];
+    if (!ex) throw new Error('Exercise not found');
+    const start = fromSetIndex ?? 0;
+    for (let i = start; i < ex.sets.length; i++) {
+      const st = ex.sets[i];
+      if (st.done) continue;
+      st.weight = weightKg;
+    }
+    await ctx.db.replace(sessionId, s);
+    return true;
+  },
+});
+
 export const recordExerciseRIR = mutation({
   args: { sessionId: v.id('sessions'), exerciseIndex: v.number(), rir: v.number(), userId: v.optional(v.id('users')) },
   handler: async (ctx, { sessionId, exerciseIndex, rir, userId }) => {
