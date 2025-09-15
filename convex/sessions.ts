@@ -72,6 +72,35 @@ export const getSession = query({
   },
 });
 
+export const getLatestActiveSession = query({
+  args: { userId: v.optional(v.id('users')), anonKey: v.optional(v.string()) },
+  handler: async (ctx, { userId, anonKey }) => {
+    let effectiveUserId = userId;
+    if (!effectiveUserId && !anonKey) {
+      effectiveUserId = await resolveUserId(ctx as any);
+    }
+    let sessions: any[] = [];
+    if (effectiveUserId) {
+      const userSessions = await ctx.db
+        .query('sessions')
+        .withIndex('by_user_started', q => q.eq('userId', effectiveUserId))
+        .collect();
+      sessions = sessions.concat(userSessions);
+    }
+    if (anonKey) {
+      const anonSessions = await ctx.db
+        .query('sessions')
+        .withIndex('by_anon_started', q => q.eq('anonKey', anonKey))
+        .collect();
+      sessions = sessions.concat(anonSessions);
+    }
+    const active = sessions
+      .filter(s => s.status === 'active')
+      .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+    return active ?? null;
+  },
+});
+
 export const startFromTemplate = mutation({
   args: { 
     templateId: v.id('templates'), 

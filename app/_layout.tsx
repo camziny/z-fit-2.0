@@ -1,3 +1,4 @@
+import ActiveSessionResume from '@/components/ActiveSessionResume';
 import AuthSync from '@/components/AuthSync';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
@@ -34,6 +35,7 @@ export default function RootLayout() {
         <GluestackUIProvider config={theme} colorMode={effectiveColorScheme === 'dark' ? 'dark' : 'light'}>
           <ThemeProvider value={effectiveColorScheme === 'dark' ? DarkTheme : DefaultTheme}>
             <AuthSync />
+            <ActiveSessionResume />
             <Stack>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="+not-found" />

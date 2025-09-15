@@ -10,21 +10,22 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+    withTiming
 } from 'react-native-reanimated';
 
 import {
-  HeaderProgress,
-  RestCompleteOverlay,
-  SetCard,
-  SetSuccessOverlay,
-  WorkoutCompleteOverlay,
-  WorkoutRoadmapModal,
+    HeaderProgress,
+    RestCompleteOverlay,
+    SetCard,
+    SetSuccessOverlay,
+    WorkoutCompleteOverlay,
+    WorkoutRoadmapModal,
 } from '@/components/workout';
 import type { Id } from '@/convex/_generated/dataModel';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function WorkoutSessionScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: Id<'sessions'> }>();
@@ -64,6 +65,15 @@ export default function WorkoutSessionScreen() {
   const restCompleteScale = useSharedValue(0.5);
 
   const recordRir = useMutation(api.sessions.recordExerciseRIR);
+
+  useEffect(() => {
+    if (sessionId) {
+      AsyncStorage.setItem('z-fit-active-session-id', String(sessionId)).catch(() => {});
+    }
+    return () => {
+      // no-op here; cleared on completion
+    };
+  }, [sessionId]);
   const { startWorkoutActivity, updateWorkoutActivity, endWorkoutActivity } = useWorkoutLiveActivity();
 
   const handleRirSelect = async (exerciseIndex: number, rir: number) => {
@@ -105,6 +115,7 @@ export default function WorkoutSessionScreen() {
     }
     
     await completeSession({ sessionId: sessionId as Id<'sessions'> });
+    try { await AsyncStorage.removeItem('z-fit-active-session-id'); } catch {}
     router.replace('/(tabs)');
   };
 
