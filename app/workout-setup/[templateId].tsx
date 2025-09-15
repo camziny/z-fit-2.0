@@ -3,6 +3,7 @@ import { useAnonKey } from '@/hooks/useAnonKey';
 import { useWeightUnit } from '@/hooks/useWeightUnit';
 import { useUser } from '@clerk/clerk-expo';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery } from 'convex/react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
@@ -271,7 +272,7 @@ export default function WorkoutSetupScreen() {
         anonKey: user ? undefined : (storedAnonKey || undefined),
         plannedWeights: weightsInKg,
       });
-      
+      try { await AsyncStorage.setItem('z-fit-active-session-id', String(sessionId)); } catch {}
       router.push(`/workout/${sessionId}`);
     } catch (error) {
       setIsStartingWorkout(false);

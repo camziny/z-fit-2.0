@@ -2,7 +2,7 @@
   "expo": {
     "name": "z-fit",
     "slug": "z-fit",
-    "version": "2.0.2",
+    "version": "2.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/z-fit_app_icon.png",
     "scheme": "zfit20",
@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.zfit",
-      "buildNumber": "8",
+      "buildNumber": "9",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

@@ -21,7 +21,7 @@ struct ZFitLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: WorkoutAttributes.self) { context in
             LiveActivityView(context: context)
-                .widgetURL(URL(string: "zfit20://workout?sessionId=\(context.attributes.sessionId)"))
+                .widgetURL(URL(string: "zfit20://workout/\(context.attributes.sessionId)"))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
@@ -76,7 +76,7 @@ private struct LiveActivityView: View {
                 }
             }.padding(12)
         }
-        .widgetURL(URL(string: "zfit20://workout?sessionId=\(context.attributes.sessionId)"))
+        .widgetURL(URL(string: "zfit20://workout/\(context.attributes.sessionId)"))
     }
 }
 
