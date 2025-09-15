@@ -37,3 +37,15 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
+
+# iOS (keep ios/ sources, ignore build artifacts)
+ios/Pods/
+ios/build/
+ios/DerivedData/
+ios/**/xcuserdata/
+*.xcuserstate
+
+# EAS / build artifacts
+.eas/
+*.ipa
+*.xcarchive

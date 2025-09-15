@@ -11,8 +11,8 @@ export default function HomeScreen() {
   const { isSignedIn } = useUser();
   const { effectiveColorScheme } = useThemeMode();
   const logoSource = effectiveColorScheme === 'dark'
-    ? require('../../assets/images/logo_dark.png')
-    : require('../../assets/images/logo_light.png');
+    ? require('../../assets/images/transparent_BG_dark.png')
+    : require('../../assets/images/transparent_BG_light.png');
 
   return (
     <Box 

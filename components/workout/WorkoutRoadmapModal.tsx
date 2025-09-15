@@ -1,5 +1,7 @@
+import { useColorScheme } from '@/hooks/useColorScheme';
+import { Ionicons } from '@expo/vector-icons';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
-import { ScrollView } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 type Exercise = {
   exerciseName?: string;
@@ -14,6 +16,8 @@ type Props = {
 };
 
 export default function WorkoutRoadmapModal({ visible, exercises, currentExerciseIndex, onClose }: Props) {
+  const colorScheme = useColorScheme();
+  
   if (!visible) return null;
 
   return (
@@ -36,7 +40,7 @@ export default function WorkoutRoadmapModal({ visible, exercises, currentExercis
         borderRadius={20}
         p={24}
         w="100%"
-        maxHeight="70%"
+        maxHeight="80%"
       >
         <VStack space="lg">
           <HStack justifyContent="space-between" alignItems="center">
@@ -57,9 +61,14 @@ export default function WorkoutRoadmapModal({ visible, exercises, currentExercis
             </Button>
           </HStack>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <VStack space="sm">
-              {exercises.map((ex, idx) => {
+          <View style={{ height: 500, overflow: 'hidden' }}>
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 16 }}
+            >
+              <VStack space="sm">
+                {exercises.map((ex, idx) => {
                 const doneSets = ex.sets.filter((s) => s.done).length;
                 const total = ex.sets.length;
                 const allDone = doneSets === total;
@@ -79,13 +88,14 @@ export default function WorkoutRoadmapModal({ visible, exercises, currentExercis
                       <VStack space="xs">
                         <HStack alignItems="center" space="xs">
                           {(ex as any).groupId && (
-                            <Text
-                              size="xs"
-                              color={isActive ? '$backgroundLight0' : '$primary0'}
-                              sx={isActive ? { _dark: { color: '$backgroundDark0' } } : { _dark: { color: '$textDark0' } }}
-                            >
-                              🔗
-                            </Text>
+                            <Ionicons
+                              name="shuffle"
+                              size={16}
+                              color={isActive 
+                                ? (colorScheme === 'dark' ? '#FFFFFF' : '#000000')  // Active: match text on primary bg
+                                : (colorScheme === 'dark' ? '#FFFFFF' : '#000000')  // Inactive: match text on card bg
+                              }
+                            />
                           )}
                           <Text
                             size="sm"
@@ -120,9 +130,10 @@ export default function WorkoutRoadmapModal({ visible, exercises, currentExercis
                     </HStack>
                   </Box>
                 );
-              })}
-            </VStack>
-          </ScrollView>
+                })}
+              </VStack>
+            </ScrollView>
+          </View>
         </VStack>
       </Box>
     </Box>

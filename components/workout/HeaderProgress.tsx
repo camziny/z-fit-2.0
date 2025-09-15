@@ -104,9 +104,6 @@ export default function HeaderProgress({
     <VStack space="lg" pt={16}>
       <HStack justifyContent="space-between" alignItems="center">
         <VStack space="xs">
-          <Text size="2xl" fontWeight="$bold" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }}>
-            Active Workout
-          </Text>
           <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
             {completedSets} of {totalSets} sets completed
           </Text>
@@ -196,9 +193,9 @@ export default function HeaderProgress({
             position="absolute"
             left={`${marker.position}%`}
             top={4}
-            w={12}
-            h={12}
-            transform={[{ translateX: -6 }]}
+            w={16}
+            h={16}
+            transform={[{ translateX: -8 }]}
             zIndex={3}
           >
             <Box
@@ -217,7 +214,7 @@ export default function HeaderProgress({
               {marker.isCompleted ? (
                 <Ionicons 
                   name="checkmark" 
-                  size={8} 
+                  size={14} 
                   color={effectiveColorScheme === 'dark' ? '#212529' : '#FFFFFF'}
                 />
               ) : (

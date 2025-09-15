@@ -1,32 +1,30 @@
+import { useColorScheme } from '@/hooks/useColorScheme';
 import type { WorkoutExercise, WorkoutSet } from '@/types/workout';
-import { Box, Text, VStack } from '@gluestack-ui/themed';
+import { Box, HStack, Pressable, Text, VStack } from '@gluestack-ui/themed';
 
-type Props = {
+export interface SetCardProps {
   currentExercise: WorkoutExercise;
   currentSet: WorkoutSet | undefined;
   currentSetIndex: number;
   formatWeight: (value: number) => string;
   convertWeight: (value: number, fromUnit: 'kg' | 'lbs', toUnit: 'kg' | 'lbs') => number;
   weightUnit: 'kg' | 'lbs';
-};
+  onWeightAdjust?: (delta: number) => Promise<void>;
+}
 
-export default function SetCard({ currentExercise, currentSet, currentSetIndex, formatWeight, convertWeight, weightUnit }: Props) {
+export default function SetCard({ currentExercise, currentSet, currentSetIndex, formatWeight, convertWeight, weightUnit, onWeightAdjust }: SetCardProps) {
   const isSuperset = !!(currentExercise as any)?.groupId;
+  const colorScheme = useColorScheme();
   
   return (
     <VStack alignItems="center" space="lg">
       <Box
-        bg={isSuperset ? "$primary50" : "$backgroundLight0"}
-        sx={isSuperset ? { _dark: { bg: '$backgroundDark50' } } : { _dark: { bg: '$backgroundDark0' } }}
+        bg="$backgroundLight0"
+        sx={{ _dark: { bg: '$backgroundDark0' } }}
         borderRadius={16}
         p={24}
         w="100%"
         alignItems="center"
-        borderWidth={isSuperset ? 1 : 0}
-        borderColor={isSuperset ? "$primary200" : "transparent"}
-        sx={{
-          ...((isSuperset ? { _dark: { bg: '$backgroundDark50', borderColor: '$primary600' } } : { _dark: { bg: '$backgroundDark0' } }))
-        }}
       >
         <VStack alignItems="center" space="sm">
           <Box
@@ -69,23 +67,103 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
 
       <VStack alignItems="center" space="xs">
         {currentSet?.weight ? (
-          <Text
-            size="xl"
-            fontWeight="$semibold"
-            color="$textLight0"
-            sx={{ _dark: { color: '$textDark0' } }}
-            textAlign="center"
-          >
-            {(() => {
-              const isPair = currentExercise?.loadingMode === 'pair';
-              const converted = convertWeight(currentSet.weight || 0, 'kg', weightUnit);
-              if (isPair) {
-                const per = converted / 2;
-                return `${formatWeight(per)} each`;
-              }
-              return formatWeight(converted);
-            })()}
-          </Text>
+          onWeightAdjust ? (
+            <HStack alignItems="center" space="md" justifyContent="center">
+              <Pressable onPress={() => onWeightAdjust(-1)}>
+                <Box
+                  borderWidth={1}
+                  borderColor="$borderLight0"
+                  sx={{ 
+                    _dark: { borderColor: '$borderDark0' },
+                    _pressed: { 
+                      bg: '$backgroundLight100',
+                      _dark: { bg: '$backgroundDark100' }
+                    }
+                  }}
+                  borderRadius={12}
+                  w={44}
+                  h={44}
+                  justifyContent="center"
+                  alignItems="center"
+                >
+                  <Text 
+                    fontSize={24} 
+                    color="$textLight0" 
+                    sx={{ _dark: { color: '$textDark0' } }} 
+                    fontWeight="$bold"
+                    lineHeight={24}
+                  >
+                    −
+                  </Text>
+                </Box>
+              </Pressable>
+              <Box minWidth={100} alignItems="center">
+                <Text
+                  size="xl"
+                  fontWeight="$semibold"
+                  color="$textLight0"
+                  sx={{ _dark: { color: '$textDark0' } }}
+                  textAlign="center"
+                >
+                  {(() => {
+                    const isPair = currentExercise?.loadingMode === 'pair';
+                    const converted = convertWeight(currentSet.weight || 0, 'kg', weightUnit);
+                    if (isPair) {
+                      const per = converted / 2;
+                      return `${formatWeight(per)} each`;
+                    }
+                    return formatWeight(converted);
+                  })()}
+                </Text>
+              </Box>
+              <Pressable onPress={() => onWeightAdjust(1)}>
+                <Box
+                  borderWidth={1}
+                  borderColor="$borderLight0"
+                  sx={{ 
+                    _dark: { borderColor: '$borderDark0' },
+                    _pressed: { 
+                      bg: '$backgroundLight100',
+                      _dark: { bg: '$backgroundDark100' }
+                    }
+                  }}
+                  borderRadius={12}
+                  w={44}
+                  h={44}
+                  justifyContent="center"
+                  alignItems="center"
+                >
+                  <Text 
+                    fontSize={24} 
+                    color="$textLight0" 
+                    sx={{ _dark: { color: '$textDark0' } }} 
+                    fontWeight="$bold"
+                    lineHeight={24}
+                  >
+                    +
+                  </Text>
+                </Box>
+              </Pressable>
+            </HStack>
+          ) : (
+            <Text
+              size="xl"
+              fontWeight="$semibold"
+              color="$textLight0"
+              sx={{ _dark: { color: '$textDark0' } }}
+              textAlign="center"
+            >
+              {(() => {
+                const isPair = currentExercise?.loadingMode === 'pair';
+                const converted = convertWeight(currentSet.weight || 0, 'kg', weightUnit);
+                if (isPair) {
+                  const per = converted / 2;
+                  return `${formatWeight(per)} each`;
+                }
+                return formatWeight(converted);
+              })()}
+            </Text>
+          )
         ) : (
           <Text
             size="lg"
@@ -137,9 +215,7 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
                 return `Use 1 × ${oneText} ${weightUnit} ${impl}`;
               }
               if (lm === 'bar') {
-                const total = convertWeight(currentSet.weight || 0, 'kg', weightUnit);
-                const totalText = formatWeight(total).replace(` ${weightUnit}`, '');
-                return `Load bar to ${totalText} ${weightUnit}`;
+                return '';
               }
               return '';
             })()}
