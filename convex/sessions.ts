@@ -117,7 +117,7 @@ export const startFromTemplate = mutation({
       template.items
         .sort((a: any, b: any) => a.order - b.order)
         .map(async (item: any) => {
-          const ex = await ctx.db.get(item.exerciseId);
+          const ex = (await ctx.db.get(item.exerciseId)) as any;
           // Merge provided plannedWeights with progression profile next weights
           let plannedWeight = plannedWeights[item.exerciseId] as number | undefined;
           if (plannedWeight === undefined && resolvedUserId) {
@@ -129,10 +129,10 @@ export const startFromTemplate = mutation({
           }
           return {
             exerciseId: item.exerciseId,
-            exerciseName: ex?.name ?? '',
+            exerciseName: (ex?.name as string) ?? '',
             equipment: ex?.equipment,
             loadingMode: ex?.loadingMode,
-            loadBasis: (ex?.isWeighted === false) ? 'bodyweight' : 'external',
+            loadBasis: (ex?.isWeighted === false ? 'bodyweight' : 'external') as 'external' | 'bodyweight',
             order: item.order,
             groupId: item.groupId,
             groupOrder: item.groupOrder,

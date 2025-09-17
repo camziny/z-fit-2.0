@@ -17,7 +17,7 @@ export default function AuthSync() {
       if (lastSyncedId.current === user.id) return;
 
       try {
-        const userId = await getOrCreate({
+        await getOrCreate({
           clerkUserId: user.id,
           displayName: user.fullName ?? user.firstName ?? user.username ?? undefined,
         });
