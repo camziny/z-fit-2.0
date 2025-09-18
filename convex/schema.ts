@@ -23,9 +23,9 @@ export default defineSchema({
       v.literal('bodyweight')
     )),
     loadingMode: v.optional(v.union(
-      v.literal('bar'), // single implement (barbell)
-      v.literal('pair'), // two implements, per-hand
-      v.literal('single') // one hand at a time
+      v.literal('bar'), 
+      v.literal('pair'), 
+      v.literal('single') 
     )),
     roundingIncrementKg: v.optional(v.number()),
     roundingIncrementLbs: v.optional(v.number()),

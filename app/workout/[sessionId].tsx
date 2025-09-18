@@ -443,20 +443,22 @@ export default function WorkoutSessionScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <VStack space="2xl" p={24} pb={120}>
-          <HeaderProgress
-            completedSets={completedSets}
-            totalSets={totalSets}
-            overallPercent={overallPercent}
-            progressWidth={progressWidth}
-            onOpenRoadmap={() => setShowRoadmap(true)}
-            exercises={session.exercises}
-            currentExerciseIndex={currentExerciseIndex}
-            currentSetIndex={currentSetIndex}
-            restEnabled={restEnabled}
-            onToggleRest={setRestEnabled}
-            restRemainingSec={restRemainingSec}
-            onSkipRest={() => setRestRemainingSec(null)}
-          />
+{!showRoadmap && !helpVisible && !isAnyOverlayActive && (
+            <HeaderProgress
+              completedSets={completedSets}
+              totalSets={totalSets}
+              overallPercent={overallPercent}
+              progressWidth={progressWidth}
+              onOpenRoadmap={() => setShowRoadmap(true)}
+              exercises={session.exercises}
+              currentExerciseIndex={currentExerciseIndex}
+              currentSetIndex={currentSetIndex}
+              restEnabled={restEnabled}
+              onToggleRest={setRestEnabled}
+              restRemainingSec={restRemainingSec}
+              onSkipRest={() => setRestRemainingSec(null)}
+            />
+          )}
 
           <Box position="relative">
               <Box
@@ -474,30 +476,32 @@ export default function WorkoutSessionScreen() {
                 alignItems="center"
                 position="relative"
               >
-                <Box
-                  position="absolute"
-                  top={12}
-                  right={12}
-                  zIndex={10}
-                >
-                  <Pressable onPress={() => setHelpVisible(true)}>
-                    <Box
-                      bg="$backgroundLight100"
-                      sx={{ _dark: { bg: '$backgroundDark100' } }}
-                      borderRadius={12}
-                      w={28}
-                      h={28}
-                      justifyContent="center"
-                      alignItems="center"
-                    >
-                      <Ionicons 
-                        name="play-circle" 
-                        size={16} 
-                        color={colorScheme === 'dark' ? '#9CA3AF' : '#6B7280'} 
-                      />
-                    </Box>
-                  </Pressable>
-                </Box>
+                {!showRoadmap && !helpVisible && !isAnyOverlayActive && (
+                  <Box
+                    position="absolute"
+                    top={12}
+                    right={12}
+                    zIndex={10}
+                  >
+                    <Pressable onPress={() => setHelpVisible(true)}>
+                      <Box
+                        bg="$backgroundLight100"
+                        sx={{ _dark: { bg: '$backgroundDark100' } }}
+                        borderRadius={12}
+                        w={28}
+                        h={28}
+                        justifyContent="center"
+                        alignItems="center"
+                      >
+                        <Ionicons 
+                          name="videocam" 
+                          size={14} 
+                          color={colorScheme === 'dark' ? '#9CA3AF' : '#6B7280'} 
+                        />
+                      </Box>
+                    </Pressable>
+                  </Box>
+                )}
                           <VStack space="2xl" alignItems="center" w="100%">
               <VStack alignItems="center" space="xs">
                 <Text 
