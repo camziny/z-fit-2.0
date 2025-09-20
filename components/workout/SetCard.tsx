@@ -1,5 +1,6 @@
 // import { useColorScheme } from '@/hooks/useColorScheme';
 import type { WorkoutExercise, WorkoutSet } from '@/types/workout';
+import { Ionicons } from '@expo/vector-icons';
 import { Box, HStack, Pressable, Text, VStack } from '@gluestack-ui/themed';
 import { useState } from 'react';
 import ExerciseHelpModal from './ExerciseHelpModal';
@@ -29,6 +30,11 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
         w="100%"
         alignItems="center"
       >
+        <Pressable onPress={() => setHelpVisible(true)} style={{ position: 'absolute', top: 16, right: 16 }}>
+          <Box bg="$backgroundLight0" borderRadius={999} w={36} h={36} justifyContent="center" alignItems="center" borderColor="$borderLight0" borderWidth={1} sx={{ _dark: { bg: '$backgroundDark0', borderColor: '$borderDark0' } }}>
+            <Ionicons name="videocam" size={18} color="#6C757D" />
+          </Box>
+        </Pressable>
         <VStack alignItems="center" space="sm">
           <Box
             bg="$primary0"
