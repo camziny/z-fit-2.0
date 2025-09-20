@@ -203,4 +203,144 @@ export const clearAllData = mutation({
 });
 
 
+export const replaceLegsPpl2WithGifs = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+
+    const requiredExercises: Array<{
+      name: string;
+      bodyPart: string;
+      isWeighted: boolean;
+      equipment: 'barbell' | 'dumbbell' | 'machine' | 'kettlebell' | 'cable' | 'bodyweight';
+      loadingMode: 'bar' | 'pair' | 'single';
+      gifUrl: string;
+      description?: string;
+    }> = [
+      {
+        name: 'Reverse Hyper',
+        bodyPart: 'back',
+        isWeighted: true,
+        equipment: 'machine',
+        loadingMode: 'bar',
+        gifUrl: 'https://gifrun.blob.core.windows.net/temp/31e154c3d58247a495e3ba260d0dd07b.gif',
+      },
+      {
+        name: 'Trap Bar Deadlift',
+        bodyPart: 'legs',
+        isWeighted: true,
+        equipment: 'barbell',
+        loadingMode: 'bar',
+        gifUrl: 'https://gifrun.blob.core.windows.net/temp/f0be73631edf4e2f90ca8e20dd430c31.gif',
+      },
+      {
+        name: 'Front Squat',
+        bodyPart: 'legs',
+        isWeighted: true,
+        equipment: 'barbell',
+        loadingMode: 'bar',
+        gifUrl: 'https://gifrun.blob.core.windows.net/temp/5d11b2ca3b244bb99c507ec281ac4af6.gif',
+        description: 'Use ~80% 1RM',
+      },
+      {
+        name: 'Dumbbell Reverse Lunge',
+        bodyPart: 'legs',
+        isWeighted: true,
+        equipment: 'dumbbell',
+        loadingMode: 'pair',
+        gifUrl: 'https://gifrun.blob.core.windows.net/temp/e6b1b1ff125c41d2bc77be360702060f.gif',
+      },
+      {
+        name: 'Seated Hamstring Curl',
+        bodyPart: 'legs',
+        isWeighted: true,
+        equipment: 'machine',
+        loadingMode: 'bar',
+        gifUrl: 'https://gifrun.blob.core.windows.net/temp/b3ba88705e56460eb943a6242a24e834.gif',
+        description: 'Slow eccentric; to failure by 12 reps',
+      },
+      {
+        name: 'Standing Calf Raise',
+        bodyPart: 'legs',
+        isWeighted: true,
+        equipment: 'machine',
+        loadingMode: 'bar',
+        gifUrl: 'https://gifrun.blob.core.windows.net/temp/bc95aa4259bc42eb936ad39f5f49e296.gif',
+      },
+      {
+        name: 'Glute Ham Raise',
+        bodyPart: 'legs',
+        isWeighted: false,
+        equipment: 'bodyweight',
+        loadingMode: 'bar',
+        gifUrl: 'https://gifrun.blob.core.windows.net/temp/1a3e4613ddab466584520b63fd529962.gif',
+        description: 'To failure',
+      },
+    ];
+
+    const exerciseIds: Record<string, any> = {};
+    for (const ex of requiredExercises) {
+      const existing = await ctx.db
+        .query('exercises')
+        .withIndex('by_name', q => q.eq('name', ex.name))
+        .first();
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          gifUrl: ex.gifUrl,
+          description: ex.description,
+          bodyPart: ex.bodyPart,
+          isWeighted: ex.isWeighted,
+          equipment: ex.equipment,
+          loadingMode: ex.loadingMode,
+        });
+        exerciseIds[ex.name] = existing._id;
+      } else {
+        const insertedId = await ctx.db.insert('exercises', { ...ex, createdAt: now });
+        exerciseIds[ex.name] = insertedId;
+      }
+    }
+
+    const items = [
+      { exerciseId: exerciseIds['Reverse Hyper'], order: 1, sets: [ { reps: 15, weight: undefined, restSec: 60 }, { reps: 15, weight: undefined, restSec: 60 } ] },
+      { exerciseId: exerciseIds['Trap Bar Deadlift'], order: 2, sets: [ { reps: 5, weight: undefined, restSec: 150 }, { reps: 5, weight: undefined, restSec: 150 }, { reps: 5, weight: undefined, restSec: 150 } ] },
+      { exerciseId: exerciseIds['Front Squat'], order: 3, sets: [ { reps: 8, weight: undefined, restSec: 150 }, { reps: 7, weight: undefined, restSec: 150 }, { reps: 6, weight: undefined, restSec: 150 } ] },
+      { exerciseId: exerciseIds['Dumbbell Reverse Lunge'], order: 4, sets: [ { reps: 10, weight: undefined, restSec: 120 }, { reps: 10, weight: undefined, restSec: 120 }, { reps: 10, weight: undefined, restSec: 120 } ] },
+      { exerciseId: exerciseIds['Seated Hamstring Curl'], order: 5, sets: [ { reps: 12, weight: undefined, restSec: 90 }, { reps: 12, weight: undefined, restSec: 90 }, { reps: 12, weight: undefined, restSec: 90 } ] },
+      { exerciseId: exerciseIds['Standing Calf Raise'], order: 6, sets: [ { reps: 20, weight: undefined, restSec: 60 }, { reps: 18, weight: undefined, restSec: 60 }, { reps: 15, weight: undefined, restSec: 60 } ] },
+      { exerciseId: exerciseIds['Glute Ham Raise'], order: 7, sets: [ { reps: 15, weight: undefined, restSec: 60 }, { reps: 12, weight: undefined, restSec: 60 }, { reps: 10, weight: undefined, restSec: 60 } ] },
+    ];
+
+    const legsTemplates = await ctx.db
+      .query('templates')
+      .withIndex('by_body_part', q => q.eq('bodyPart', 'legs'))
+      .collect();
+
+    const existing = legsTemplates.find(
+      t => t.variation === 'ppl2' || t.name === 'Legs PPL 2' || t.name === 'PERFECT PPL WORKOUT: LEGS 2'
+    );
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        name: 'PERFECT PPL WORKOUT: LEGS 2',
+        description: 'Updated legs workout with gifs',
+        variation: 'ppl2',
+        items,
+      });
+      return true;
+    }
+
+    await ctx.db.insert('templates', {
+      name: 'PERFECT PPL WORKOUT: LEGS 2',
+      description: 'Updated legs workout with gifs',
+      bodyPart: 'legs',
+      variation: 'ppl2',
+      items,
+      createdAt: now,
+    });
+
+    return true;
+  },
+});
+
+
 

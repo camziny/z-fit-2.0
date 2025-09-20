@@ -1,6 +1,8 @@
-import { useColorScheme } from '@/hooks/useColorScheme';
+// import { useColorScheme } from '@/hooks/useColorScheme';
 import type { WorkoutExercise, WorkoutSet } from '@/types/workout';
 import { Box, HStack, Pressable, Text, VStack } from '@gluestack-ui/themed';
+import { useState } from 'react';
+import ExerciseHelpModal from './ExerciseHelpModal';
 
 export interface SetCardProps {
   currentExercise: WorkoutExercise;
@@ -13,8 +15,9 @@ export interface SetCardProps {
 }
 
 export default function SetCard({ currentExercise, currentSet, currentSetIndex, formatWeight, convertWeight, weightUnit, onWeightAdjust }: SetCardProps) {
-  const isSuperset = !!(currentExercise as any)?.groupId;
-  const colorScheme = useColorScheme();
+  // const isSuperset = !!(currentExercise as any)?.groupId;
+  // const colorScheme = useColorScheme();
+  const [helpVisible, setHelpVisible] = useState(false);
   
   return (
     <VStack alignItems="center" space="lg">
@@ -222,6 +225,7 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
           </Text>
         )}
       </VStack>
+      <ExerciseHelpModal visible={helpVisible} name={currentExercise?.exerciseName} exerciseId={(currentExercise as any)?.exerciseId} gifUrl={(currentExercise as any)?.gifUrl} onClose={() => setHelpVisible(false)} />
     </VStack>
   );
 }

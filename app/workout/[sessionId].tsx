@@ -8,7 +8,7 @@ import { useMutation, useQuery } from 'convex/react';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
@@ -24,6 +24,7 @@ import {
     WorkoutCompleteOverlay,
     WorkoutRoadmapModal,
 } from '@/components/workout';
+import ExerciseHelpModal from '@/components/workout/ExerciseHelpModal';
 import type { Id } from '@/convex/_generated/dataModel';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -47,6 +48,7 @@ export default function WorkoutSessionScreen() {
   const [overlayExerciseComplete, setOverlayExerciseComplete] = useState(false);
   const [overlayExerciseName, setOverlayExerciseName] = useState<string>('');
   const [liveActivityId, setLiveActivityId] = useState<string | null>(null);
+  const [helpVisible, setHelpVisible] = useState(false);
   
 
   const buttonScale = useSharedValue(1);
@@ -441,20 +443,22 @@ export default function WorkoutSessionScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <VStack space="2xl" p={24} pb={120}>
-          <HeaderProgress
-            completedSets={completedSets}
-            totalSets={totalSets}
-            overallPercent={overallPercent}
-            progressWidth={progressWidth}
-            onOpenRoadmap={() => setShowRoadmap(true)}
-            exercises={session.exercises}
-            currentExerciseIndex={currentExerciseIndex}
-            currentSetIndex={currentSetIndex}
-            restEnabled={restEnabled}
-            onToggleRest={setRestEnabled}
-            restRemainingSec={restRemainingSec}
-            onSkipRest={() => setRestRemainingSec(null)}
-          />
+{!showRoadmap && !helpVisible && !isAnyOverlayActive && (
+            <HeaderProgress
+              completedSets={completedSets}
+              totalSets={totalSets}
+              overallPercent={overallPercent}
+              progressWidth={progressWidth}
+              onOpenRoadmap={() => setShowRoadmap(true)}
+              exercises={session.exercises}
+              currentExerciseIndex={currentExerciseIndex}
+              currentSetIndex={currentSetIndex}
+              restEnabled={restEnabled}
+              onToggleRest={setRestEnabled}
+              restRemainingSec={restRemainingSec}
+              onSkipRest={() => setRestRemainingSec(null)}
+            />
+          )}
 
           <Box position="relative">
               <Box
@@ -470,7 +474,34 @@ export default function WorkoutSessionScreen() {
                 borderRadius={20}
                 p={32}
                 alignItems="center"
+                position="relative"
               >
+                {!showRoadmap && !helpVisible && !isAnyOverlayActive && (
+                  <Box
+                    position="absolute"
+                    top={12}
+                    right={12}
+                    zIndex={10}
+                  >
+                    <Pressable onPress={() => setHelpVisible(true)}>
+                      <Box
+                        bg="$backgroundLight100"
+                        sx={{ _dark: { bg: '$backgroundDark100' } }}
+                        borderRadius={12}
+                        w={28}
+                        h={28}
+                        justifyContent="center"
+                        alignItems="center"
+                      >
+                        <Ionicons 
+                          name="videocam" 
+                          size={14} 
+                          color={colorScheme === 'dark' ? '#9CA3AF' : '#6B7280'} 
+                        />
+                      </Box>
+                    </Pressable>
+                  </Box>
+                )}
                           <VStack space="2xl" alignItems="center" w="100%">
               <VStack alignItems="center" space="xs">
                 <Text 
@@ -710,6 +741,12 @@ export default function WorkoutSessionScreen() {
             currentExerciseIndex={currentExerciseIndex}
             onClose={() => setShowRoadmap(false)}
           />
+      <ExerciseHelpModal
+        visible={helpVisible}
+        name={currentExercise?.exerciseName}
+        exerciseId={currentExercise?.exerciseId as any}
+        onClose={() => setHelpVisible(false)}
+      />
         </VStack>
       </ScrollView>
 
