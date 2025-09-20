@@ -2,9 +2,10 @@ import { api } from '@/convex/_generated/api';
 
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
 import { useQuery } from 'convex/react';
+import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
-import { useMemo } from 'react';
 
 export default function WorkoutsByBodyPartScreen() {
   const { bodyPart } = useLocalSearchParams<{ bodyPart: string }>();
@@ -38,6 +39,14 @@ export default function WorkoutsByBodyPartScreen() {
     return Array.from(ids);
   }, [templates]);
   const exercises = useQuery(api.exercises.getMultiple, exerciseIds.length ? { exerciseIds: exerciseIds as any } : 'skip');
+  
+  useEffect(() => {
+    if (!exercises) return;
+    try {
+      const urls = (exercises as any[]).map((e: any) => e.gifUrl).filter(Boolean).slice(0, 6) as string[];
+      urls.forEach(u => { try { ExpoImage.prefetch(u).catch(() => {}); } catch {} });
+    } catch {}
+  }, [exercises]);
   
   const onStartSetup = (template: any) => {
     router.push(`/workout-setup/${template._id}`);

@@ -443,7 +443,7 @@ export default function WorkoutSessionScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <VStack space="2xl" p={24} pb={120}>
-{!showRoadmap && !helpVisible && !isAnyOverlayActive && (
+          {!showRoadmap && (
             <HeaderProgress
               completedSets={completedSets}
               totalSets={totalSets}
@@ -476,7 +476,7 @@ export default function WorkoutSessionScreen() {
                 alignItems="center"
                 position="relative"
               >
-                {!showRoadmap && !helpVisible && !isAnyOverlayActive && (
+                {!showRoadmap && (
                   <Box
                     position="absolute"
                     top={12}

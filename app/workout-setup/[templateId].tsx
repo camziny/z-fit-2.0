@@ -5,6 +5,7 @@ import { useUser } from '@clerk/clerk-expo';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery } from 'convex/react';
+import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, TextInput } from 'react-native';
@@ -69,6 +70,16 @@ export default function WorkoutSetupScreen() {
   const [step, setStep] = useState<'assessment' | 'weights'>('assessment');
   const [plannedWeights, setPlannedWeights] = useState<Record<string, number>>({});
   const [whyOpen, setWhyOpen] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!exercises || !template) return;
+    try {
+      const idsInTemplate = new Set(template.items.map((i: any) => i.exerciseId));
+      const inOrder = (exercises as any[]).filter((e: any) => idsInTemplate.has(e._id));
+      const toPrefetch = inOrder.map((e: any) => e.gifUrl).filter(Boolean).slice(0, 4) as string[];
+      toPrefetch.forEach((u) => { try { ExpoImage.prefetch(u).catch(() => {}); } catch {} });
+    } catch {}
+  }, [template, exercises]);
 
   const assessmentQuestions = useMemo(() => {
     if (!template || !exercises) return [];
