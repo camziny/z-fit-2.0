@@ -123,8 +123,15 @@ export default function WorkoutSetupScreen() {
     return Math.round(weight / 5) * 5;
   };
 
+  const getAssumedWorkingReps = (exerciseMeta?: any): number => {
+    const n = String(exerciseMeta?.name || '').toLowerCase();
+    if (n.includes('romanian') || n.includes('rdl')) return 10;
+    if (n.includes('trap bar deadlift') || n.includes('barbell deadlift') || n.includes('snatch grip deadlift') || (n.includes('deadlift') && !n.includes('romanian'))) return 5;
+    return 10;
+  };
+
   const calculateSuggestedWeight = (baseWeight: number, baseType: '1rm' | 'working', targetReps: number, exerciseMeta?: any): number => {
-    const assumedWorkingReps = 10;
+    const assumedWorkingReps = getAssumedWorkingReps(exerciseMeta);
     let estimatedOneRm = baseWeight;
     if (baseType === 'working') {
       estimatedOneRm = baseWeight * (1 + assumedWorkingReps / 30);
@@ -220,10 +227,11 @@ export default function WorkoutSetupScreen() {
     }
     if (baseValInCurrentUnit === undefined) return;
     let prefFill = baseValInCurrentUnit;
+    const assumedWorkingReps = getAssumedWorkingReps(currentQuestion.exercise);
     if (currentQuestion.type === '1rm' && baseType === 'working') {
-      prefFill = baseValInCurrentUnit * (1 + 10 / 30);
+      prefFill = baseValInCurrentUnit * (1 + assumedWorkingReps / 30);
     } else if (currentQuestion.type === 'working' && baseType === '1rm') {
-      prefFill = baseValInCurrentUnit / (1 + 10 / 30);
+      prefFill = baseValInCurrentUnit / (1 + assumedWorkingReps / 30);
     }
     const rounded = roundGym(prefFill, currentQuestion.exercise);
     setCurrentAnswer(String(rounded));
@@ -723,9 +731,10 @@ export default function WorkoutSetupScreen() {
                       const baseType = base ? base.type : 'working';
                       const baseUnit = base ? base.unit || weightUnit : weightUnit;
                       const baseValInCurrent = base ? convertWeight(base.value, baseUnit as any, weightUnit as any) : 0;
+                      const assumedWorkingReps = getAssumedWorkingReps(exMeta);
                       const estimated1RM = baseType === '1rm'
                         ? baseValInCurrent
-                        : baseValInCurrent * (1 + 10 / 30);
+                        : baseValInCurrent * (1 + assumedWorkingReps / 30);
                       const targetReps = Math.round(item.sets.reduce((acc: number, s: any) => acc + s.reps, 0) / item.sets.length);
                       const raw = estimated1RM / (1 + targetReps / 30);
                       const rounded = roundGym(raw, exMeta);

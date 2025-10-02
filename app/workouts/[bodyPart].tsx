@@ -6,6 +6,121 @@ import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
+import Animated, {
+    Easing,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withTiming
+} from 'react-native-reanimated';
+
+function LoadingSkeleton() {
+  const shimmerOpacity = useSharedValue(0.3);
+
+  useEffect(() => {
+    shimmerOpacity.value = withRepeat(
+      withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true
+    );
+  }, [shimmerOpacity]);
+
+  const shimmerStyle = useAnimatedStyle(() => {
+    return {
+      opacity: shimmerOpacity.value,
+    };
+  });
+
+  return (
+    <VStack space="lg">
+      {[1, 2].map((i) => (
+        <Box
+          key={i}
+          bg="$cardLight"
+          sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
+          borderColor="$borderLight0"
+          borderWidth={1}
+          borderRadius={16}
+          p={24}
+          overflow="hidden"
+        >
+          <Animated.View style={shimmerStyle}>
+            <VStack space="lg">
+              <VStack space="sm">
+                <Box
+                  bg="$backgroundLight100"
+                  sx={{ _dark: { bg: '$backgroundDark100' } }}
+                  h={28}
+                  w="70%"
+                  borderRadius={8}
+                />
+                <Box
+                  bg="$backgroundLight100"
+                  sx={{ _dark: { bg: '$backgroundDark100' } }}
+                  h={20}
+                  w="90%"
+                  borderRadius={6}
+                />
+              </VStack>
+              
+              <HStack space="sm">
+                <Box
+                  bg="$backgroundLight100"
+                  sx={{ _dark: { bg: '$backgroundDark100' } }}
+                  h={32}
+                  w={100}
+                  borderRadius={999}
+                />
+                <Box
+                  bg="$backgroundLight100"
+                  sx={{ _dark: { bg: '$backgroundDark100' } }}
+                  h={32}
+                  w={80}
+                  borderRadius={999}
+                />
+                <Box
+                  bg="$backgroundLight100"
+                  sx={{ _dark: { bg: '$backgroundDark100' } }}
+                  h={32}
+                  w={90}
+                  borderRadius={999}
+                />
+              </HStack>
+
+              <VStack space="xs">
+                <Box
+                  bg="$backgroundLight100"
+                  sx={{ _dark: { bg: '$backgroundDark100' } }}
+                  h={20}
+                  w="50%"
+                  borderRadius={6}
+                />
+                {[1, 2, 3, 4].map((j) => (
+                  <Box
+                    key={j}
+                    bg="$backgroundLight100"
+                    sx={{ _dark: { bg: '$backgroundDark100' } }}
+                    h={18}
+                    w="85%"
+                    borderRadius={6}
+                  />
+                ))}
+              </VStack>
+
+              <Box
+                bg="$backgroundLight100"
+                sx={{ _dark: { bg: '$backgroundDark100' } }}
+                h={48}
+                w="100%"
+                borderRadius={12}
+              />
+            </VStack>
+          </Animated.View>
+        </Box>
+      ))}
+    </VStack>
+  );
+}
 
 export default function WorkoutsByBodyPartScreen() {
   const { bodyPart } = useLocalSearchParams<{ bodyPart: string }>();
@@ -100,132 +215,9 @@ export default function WorkoutsByBodyPartScreen() {
           </VStack>
 
           <VStack space="lg">
-            {(templates ?? []).map((template: any) => (
-              <Box
-                key={template._id}
-                bg="$cardLight"
-                sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
-                borderColor="$borderLight0"
-                borderWidth={1}
-                borderRadius={16}
-                p={24}
-              >
-                <VStack space="lg">
-                  <VStack space="sm">
-                    <Text 
-                      size="xl" 
-                      fontWeight="$semibold" 
-                      color="$textLight0"
-                      sx={{ _dark: { color: '$textDark0' } }}
-                    >
-                      {template.name}
-                    </Text>
-                    {template.description && (
-                      <Text 
-                        size="sm" 
-                        color="$textLight200"
-                        sx={{ _dark: { color: '$textDark200' } }}
-                      >
-                        {template.description}
-                      </Text>
-                    )}
-                  </VStack>
-                  
-                  <VStack space="md">
-                    <HStack alignItems="center">
-                      <Box 
-                        bg="$backgroundLight0" 
-                        borderColor="$borderLight0" 
-                        borderWidth={1} 
-                        borderRadius={999} 
-                        px={12} 
-                        py={6}
-                        sx={{ _dark: { bg: '$backgroundDark0', borderColor: '$borderDark0' } }}
-                      >
-                        <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>{template.items.length} exercises</Text>
-                      </Box>
-                      <Box 
-                        ml={8}
-                        bg="$backgroundLight0" 
-                        borderColor="$borderLight0" 
-                        borderWidth={1} 
-                        borderRadius={999} 
-                        px={12} 
-                        py={6}
-                        sx={{ _dark: { bg: '$backgroundDark0', borderColor: '$borderDark0' } }}
-                      >
-                        <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                          {template.items.reduce((acc: number, it: any) => acc + it.sets.length, 0)} sets
-                        </Text>
-                      </Box>
-                      <Box 
-                        ml={8}
-                        bg="$backgroundLight0" 
-                        borderColor="$borderLight0" 
-                        borderWidth={1} 
-                        borderRadius={999} 
-                        px={12} 
-                        py={6}
-                        sx={{ _dark: { bg: '$backgroundDark0', borderColor: '$borderDark0' } }}
-                      >
-                        <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                          {Math.max(1, Math.round(((template.items.flatMap((it: any) => it.sets).reduce((acc: number, s: any) => acc + (s.restSec ?? 60), 0)) + (template.items.flatMap((it: any) => it.sets).length * 40)) / 60))} min
-                        </Text>
-                      </Box>
-                    </HStack>
-
-                    <VStack space="xs">
-                      <Text 
-                        size="sm" 
-                        fontWeight="$medium" 
-                        color="$textLight200"
-                        sx={{ _dark: { color: '$textDark200' } }}
-                      >
-                        Included exercises
-                      </Text>
-                      {template.items.map((item: any, index: number) => {
-                        const ex = (exercises ?? []).find((e: any) => e._id === item.exerciseId);
-                        const label = ex?.name || 'Exercise';
-                        const isSuperset = !!item.groupId;
-                        const supersetTag = isSuperset ? ` (Superset ${item.groupOrder || 1})` : '';
-                        return (
-                          <Text 
-                            key={index} 
-                            size="sm" 
-                            color="$textLight300"
-                            sx={{ _dark: { color: '$textDark300' } }}
-                          >
-                            • {label}{supersetTag} · {item.sets.length} sets
-                          </Text>
-                        );
-                      })}
-                    </VStack>
-                  </VStack>
-
-                  <Button 
-                    bg="$primary0"
-                    sx={{ _dark: { bg: '$textDark0' } }}
-                    onPress={() => onStartSetup(template)}
-                    borderRadius={12}
-                    h={48}
-                    justifyContent="center"
-                    alignItems="center"
-                    px={24}
-                  >
-                    <Text 
-                      color="$backgroundLight0"
-                      sx={{ _dark: { color: '$backgroundDark0' } }}
-                      fontWeight="$medium"
-                      size="md"
-                    >
-                      Start Workout
-                    </Text>
-                  </Button>
-                </VStack>
-              </Box>
-            ))}
-
-            {(!templates || templates.length === 0) && (
+            {templates === undefined ? (
+              <LoadingSkeleton />
+            ) : templates.length === 0 ? (
               <Box
                 bg="$cardLight"
                 sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
@@ -253,6 +245,131 @@ export default function WorkoutsByBodyPartScreen() {
                   </Text>
                 </VStack>
               </Box>
+            ) : (
+              templates.map((template: any) => (
+                <Box
+                  key={template._id}
+                  bg="$cardLight"
+                  sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
+                  borderColor="$borderLight0"
+                  borderWidth={1}
+                  borderRadius={16}
+                  p={24}
+                >
+                  <VStack space="lg">
+                    <VStack space="sm">
+                      <Text 
+                        size="xl" 
+                        fontWeight="$semibold" 
+                        color="$textLight0"
+                        sx={{ _dark: { color: '$textDark0' } }}
+                      >
+                        {template.name}
+                      </Text>
+                      {template.description && (
+                        <Text 
+                          size="sm" 
+                          color="$textLight200"
+                          sx={{ _dark: { color: '$textDark200' } }}
+                        >
+                          {template.description}
+                        </Text>
+                      )}
+                    </VStack>
+                    
+                    <VStack space="md">
+                      <HStack alignItems="center">
+                        <Box 
+                          bg="$backgroundLight0" 
+                          borderColor="$borderLight0" 
+                          borderWidth={1} 
+                          borderRadius={999} 
+                          px={12} 
+                          py={6}
+                          sx={{ _dark: { bg: '$backgroundDark0', borderColor: '$borderDark0' } }}
+                        >
+                          <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>{template.items.length} exercises</Text>
+                        </Box>
+                        <Box 
+                          ml={8}
+                          bg="$backgroundLight0" 
+                          borderColor="$borderLight0" 
+                          borderWidth={1} 
+                          borderRadius={999} 
+                          px={12} 
+                          py={6}
+                          sx={{ _dark: { bg: '$backgroundDark0', borderColor: '$borderDark0' } }}
+                        >
+                          <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
+                            {template.items.reduce((acc: number, it: any) => acc + it.sets.length, 0)} sets
+                          </Text>
+                        </Box>
+                        <Box 
+                          ml={8}
+                          bg="$backgroundLight0" 
+                          borderColor="$borderLight0" 
+                          borderWidth={1} 
+                          borderRadius={999} 
+                          px={12} 
+                          py={6}
+                          sx={{ _dark: { bg: '$backgroundDark0', borderColor: '$borderDark0' } }}
+                        >
+                          <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
+                            {Math.max(1, Math.round(((template.items.flatMap((it: any) => it.sets).reduce((acc: number, s: any) => acc + (s.restSec ?? 60), 0)) + (template.items.flatMap((it: any) => it.sets).length * 40)) / 60))} min
+                          </Text>
+                        </Box>
+                      </HStack>
+
+                      <VStack space="xs">
+                        <Text 
+                          size="sm" 
+                          fontWeight="$medium" 
+                          color="$textLight200"
+                          sx={{ _dark: { color: '$textDark200' } }}
+                        >
+                          Included exercises
+                        </Text>
+                        {template.items.map((item: any, index: number) => {
+                          const ex = (exercises ?? []).find((e: any) => e._id === item.exerciseId);
+                          const label = ex?.name || 'Exercise';
+                          const isSuperset = !!item.groupId;
+                          const supersetTag = isSuperset ? ` (Superset ${item.groupOrder || 1})` : '';
+                          return (
+                            <Text 
+                              key={index} 
+                              size="sm" 
+                              color="$textLight300"
+                              sx={{ _dark: { color: '$textDark300' } }}
+                            >
+                              • {label}{supersetTag} · {item.sets.length} sets
+                            </Text>
+                          );
+                        })}
+                      </VStack>
+                    </VStack>
+
+                    <Button 
+                      bg="$primary0"
+                      sx={{ _dark: { bg: '$textDark0' } }}
+                      onPress={() => onStartSetup(template)}
+                      borderRadius={12}
+                      h={48}
+                      justifyContent="center"
+                      alignItems="center"
+                      px={24}
+                    >
+                      <Text 
+                        color="$backgroundLight0"
+                        sx={{ _dark: { color: '$backgroundDark0' } }}
+                        fontWeight="$medium"
+                        size="md"
+                      >
+                        Start Workout
+                      </Text>
+                    </Button>
+                  </VStack>
+                </Box>
+              ))
             )}
           </VStack>
         </VStack>

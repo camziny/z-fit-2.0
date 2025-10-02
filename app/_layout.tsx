@@ -72,6 +72,8 @@ export default function RootLayout() {
                 options={{ 
                   headerShown: true,
                   title: 'Active Workout',
+                  headerBackTitle: 'Workouts',
+                  headerBackButtonMenuEnabled: false,
                   headerStyle: { backgroundColor: effectiveColorScheme === 'dark' ? '#343A40' : '#F8F9FA' },
                   headerTintColor: effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529',
                 }} 

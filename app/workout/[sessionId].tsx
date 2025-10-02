@@ -4,6 +4,7 @@ import { useWorkoutLiveActivity } from '@/hooks/useLiveActivity';
 import { useWeightUnit } from '@/hooks/useWeightUnit';
 import { Ionicons } from '@expo/vector-icons';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
+import { usePreventRemove } from '@react-navigation/native';
 import { useMutation, useQuery } from 'convex/react';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -49,6 +50,8 @@ export default function WorkoutSessionScreen() {
   const [overlayExerciseName, setOverlayExerciseName] = useState<string>('');
   const [liveActivityId, setLiveActivityId] = useState<string | null>(null);
   const [helpVisible, setHelpVisible] = useState(false);
+  const [quitVisible, setQuitVisible] = useState(false);
+  const [allowLeave, setAllowLeave] = useState(false);
   
 
   const buttonScale = useSharedValue(1);
@@ -77,6 +80,12 @@ export default function WorkoutSessionScreen() {
     };
   }, [sessionId]);
   const { startWorkoutActivity, updateWorkoutActivity, endWorkoutActivity } = useWorkoutLiveActivity();
+  usePreventRemove(!allowLeave, () => {
+    setQuitVisible(true);
+  });
+  const templateDoc = useQuery(api.templates.getById, session ? { templateId: (session as any).templateId } : 'skip');
+
+  
 
   const handleRirSelect = async (exerciseIndex: number, rir: number) => {
     try {
@@ -103,6 +112,7 @@ export default function WorkoutSessionScreen() {
   };
 
   const handleFinishWorkout = async () => {
+    setAllowLeave(true);
     setShowRirCollection(false);
     workoutCompleteOpacity.value = withTiming(0, { duration: 400 });
     celebrationOpacity.value = withTiming(0, { duration: 300 });
@@ -257,6 +267,24 @@ export default function WorkoutSessionScreen() {
 
   const onPrev = () => {
     if (!session) return;
+    const exercise = session.exercises[currentExerciseIndex];
+    const groupId = exercise.groupId;
+    
+    if (groupId) {
+      const groupMembers = session.exercises
+        .map((ex: any, idx: number) => ({ ex, idx }))
+        .filter(({ ex }) => ex.groupId === groupId)
+        .sort((a, b) => (a.ex.groupOrder || 0) - (b.ex.groupOrder || 0) || a.idx - b.idx);
+      const currentPos = groupMembers.findIndex(m => m.idx === currentExerciseIndex);
+      
+      if (currentPos > 0) {
+        const prevMember = groupMembers[currentPos - 1];
+        setCurrentExerciseIndex(prevMember.idx);
+        setCurrentSetIndex(currentSetIndex);
+        return;
+      }
+    }
+    
     if (currentSetIndex > 0) {
       setCurrentSetIndex(currentSetIndex - 1);
       return;
@@ -407,6 +435,23 @@ export default function WorkoutSessionScreen() {
   const onNext = () => {
     if (!session) return;
     const exercise = session.exercises[currentExerciseIndex];
+    const groupId = exercise.groupId;
+    
+    if (groupId) {
+      const groupMembers = session.exercises
+        .map((ex: any, idx: number) => ({ ex, idx }))
+        .filter(({ ex }) => ex.groupId === groupId)
+        .sort((a, b) => (a.ex.groupOrder || 0) - (b.ex.groupOrder || 0) || a.idx - b.idx);
+      const currentPos = groupMembers.findIndex(m => m.idx === currentExerciseIndex);
+      
+      if (currentPos < groupMembers.length - 1) {
+        const nextMember = groupMembers[currentPos + 1];
+        setCurrentExerciseIndex(nextMember.idx);
+        setCurrentSetIndex(currentSetIndex);
+        return;
+      }
+    }
+    
     if (currentSetIndex + 1 < exercise.sets.length) {
       setCurrentSetIndex(currentSetIndex + 1);
       return;
@@ -502,6 +547,7 @@ export default function WorkoutSessionScreen() {
                     </Pressable>
                   </Box>
                 )}
+                
                           <VStack space="2xl" alignItems="center" w="100%">
               <VStack alignItems="center" space="xs">
                 <Text 
@@ -749,6 +795,89 @@ export default function WorkoutSessionScreen() {
       />
         </VStack>
       </ScrollView>
+
+      {quitVisible && (
+        <Box
+          position="absolute"
+          top={0}
+          left={0}
+          right={0}
+          bottom={0}
+          bg="rgba(0,0,0,0.8)"
+          justifyContent="center"
+          alignItems="center"
+          p={24}
+        >
+          <Box
+            bg="$cardLight"
+            sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
+            borderColor="$borderLight0"
+            borderWidth={1}
+            borderRadius={24}
+            p={32}
+            w="100%"
+            maxWidth={340}
+          >
+            <VStack space="xl" alignItems="center">
+              <VStack space="md" alignItems="center">
+                <Text color="$textLight0" sx={{ _dark: { color: '$textDark0' } }} fontWeight="$bold" size="xl" textAlign="center">
+                  Are you sure you want to go back?
+                </Text>
+                <Text color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} fontWeight="$medium" size="sm" textAlign="center">
+                  Your workout progress will be lost.
+                </Text>
+              </VStack>
+              <HStack space="sm" w="100%">
+                <Button
+                  variant="outline"
+                  onPress={() => setQuitVisible(false)}
+                  borderColor="$borderLight0"
+                  sx={{ _dark: { borderColor: '$borderDark0' } }}
+                  borderRadius={16}
+                  h={48}
+                  flex={1}
+                >
+                  <Text 
+                    color="$textLight0" 
+                    sx={{ _dark: { color: '$textDark0' } }} 
+                    fontWeight="$medium" 
+                    size="md"
+                  >
+                    Stay
+                  </Text>
+                </Button>
+                <Button
+                  bg="$primary0"
+                  sx={{ _dark: { bg: '$textDark0' } }}
+                  onPress={async () => {
+                    setQuitVisible(false);
+                    setAllowLeave(true);
+                    try { await AsyncStorage.removeItem('z-fit-active-session-id'); } catch {}
+                    if (liveActivityId) {
+                      await endWorkoutActivity(liveActivityId);
+                      setLiveActivityId(null);
+                    }
+                    const bodyPart = (templateDoc as any)?.bodyPart || 'legs';
+                    router.replace(`/workouts/${bodyPart}`);
+                  }}
+                  borderRadius={16}
+                  h={48}
+                  flex={1}
+                >
+                  <Text 
+                    color="$backgroundLight0" 
+                    sx={{ _dark: { color: '$backgroundDark0' } }} 
+                    fontWeight="$semibold" 
+                    size="md"
+                  >
+                    Leave
+                  </Text>
+                </Button>
+              </HStack>
+            </VStack>
+          </Box>
+        </Box>
+      )}
 
       <WorkoutCompleteOverlay
         isActive={isWorkoutOverlayActive}

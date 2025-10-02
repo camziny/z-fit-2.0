@@ -1,9 +1,6 @@
 // import { useColorScheme } from '@/hooks/useColorScheme';
 import type { WorkoutExercise, WorkoutSet } from '@/types/workout';
-import { Ionicons } from '@expo/vector-icons';
 import { Box, HStack, Pressable, Text, VStack } from '@gluestack-ui/themed';
-import { useState } from 'react';
-import ExerciseHelpModal from './ExerciseHelpModal';
 
 export interface SetCardProps {
   currentExercise: WorkoutExercise;
@@ -18,7 +15,6 @@ export interface SetCardProps {
 export default function SetCard({ currentExercise, currentSet, currentSetIndex, formatWeight, convertWeight, weightUnit, onWeightAdjust }: SetCardProps) {
   // const isSuperset = !!(currentExercise as any)?.groupId;
   // const colorScheme = useColorScheme();
-  const [helpVisible, setHelpVisible] = useState(false);
   
   return (
     <VStack alignItems="center" space="lg">
@@ -30,11 +26,6 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
         w="100%"
         alignItems="center"
       >
-        <Pressable onPress={() => setHelpVisible(true)} style={{ position: 'absolute', top: 16, right: 16 }}>
-          <Box bg="$backgroundLight0" borderRadius={999} w={36} h={36} justifyContent="center" alignItems="center" borderColor="$borderLight0" borderWidth={1} sx={{ _dark: { bg: '$backgroundDark0', borderColor: '$borderDark0' } }}>
-            <Ionicons name="videocam" size={18} color="#6C757D" />
-          </Box>
-        </Pressable>
         <VStack alignItems="center" space="sm">
           <Box
             bg="$primary0"
@@ -192,13 +183,30 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
           textTransform="uppercase"
           letterSpacing={1}
         >
-          {currentSet?.weight
-            ? ((currentExercise as any)?.loadingMode === 'pair'
-                ? (currentExercise?.equipment === 'kettlebell' ? 'Per Kettlebell' : 'Per Dumbbell')
-                : (currentExercise?.loadingMode === 'bar' ? 'Barbell Load' : 'Target Weight'))
-            : (currentExercise?.loadBasis === 'external'
-                ? 'Percent of 1RM'
-                : (currentExercise?.loadBasis === 'assisted' ? 'Assistance' : 'No Weight'))}
+          {(() => {
+            const lm = (currentExercise as any)?.loadingMode as string | undefined;
+            const eq = (currentExercise as any)?.equipment as string | undefined;
+            if (currentSet?.weight) {
+              if (lm === 'pair') {
+                if (eq === 'kettlebell') return 'Per Kettlebell';
+                if (eq === 'cable') return 'Per Handle';
+                return 'Per Dumbbell';
+              }
+              if (lm === 'single') {
+                if (eq === 'kettlebell') return 'Kettlebell';
+                if (eq === 'cable') return 'Handle';
+                return 'Dumbbell';
+              }
+              if (lm === 'bar') {
+                if (eq === 'barbell') return 'Barbell Load';
+                if (eq === 'cable') return 'Cable Stack';
+                return 'Load';
+              }
+              return 'Target Weight';
+            }
+            if (currentExercise?.loadBasis === 'external') return 'Percent of 1RM';
+            return currentExercise?.loadBasis === 'assisted' ? 'Assistance' : 'No Weight';
+          })()}
         </Text>
 
         {currentSet?.weight && (
@@ -209,16 +217,16 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
             textAlign="center"
           >
             {(() => {
-              const lm = currentExercise?.loadingMode;
+              const lm = currentExercise?.loadingMode as string | undefined;
               const eq = (currentExercise as any)?.equipment as string | undefined;
               if (lm === 'pair') {
-                const impl = eq === 'kettlebell' ? 'kettlebells' : 'dumbbells';
+                const impl = eq === 'kettlebell' ? 'kettlebells' : (eq === 'cable' ? 'handles' : 'dumbbells');
                 const per = convertWeight((currentSet.weight || 0) / 2, 'kg', weightUnit);
                 const perText = formatWeight(per).replace(` ${weightUnit}`, '');
                 return `Use 2 × ${perText} ${weightUnit} ${impl}`;
               }
               if (lm === 'single') {
-                const impl = eq === 'kettlebell' ? 'kettlebell' : 'dumbbell';
+                const impl = eq === 'kettlebell' ? 'kettlebell' : (eq === 'cable' ? 'handle' : 'dumbbell');
                 const one = convertWeight(currentSet.weight || 0, 'kg', weightUnit);
                 const oneText = formatWeight(one).replace(` ${weightUnit}`, '');
                 return `Use 1 × ${oneText} ${weightUnit} ${impl}`;
@@ -231,7 +239,6 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
           </Text>
         )}
       </VStack>
-      <ExerciseHelpModal visible={helpVisible} name={currentExercise?.exerciseName} exerciseId={(currentExercise as any)?.exerciseId} gifUrl={(currentExercise as any)?.gifUrl} onClose={() => setHelpVisible(false)} />
     </VStack>
   );
 }
