@@ -1,16 +1,17 @@
 import { api } from '@/convex/_generated/api';
 import { useAnonKey } from '@/hooks/useAnonKey';
+import { useThemeMode } from '@/hooks/useThemeMode';
 import { useWeightUnit } from '@/hooks/useWeightUnit';
+import { buildPlannedWeightsInKg, getDisplayIncrement, roundGymDisplayWeight } from '@/utils/workoutPlanning';
 import { useUser } from '@clerk/clerk-expo';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery } from 'convex/react';
 import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, TextInput } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, ScrollView, StyleSheet, TextInput } from 'react-native';
 
-// Key exercises for assessment by body part
 const keyExercisesByBodyPart: Record<string, { press?: string[], pull?: string[] }> = {
   legs: { 
     press: ['Back Squat', 'Front Squat', 'Leg Press'], 
@@ -42,6 +43,9 @@ export default function WorkoutSetupScreen() {
   const { user } = useUser();
   const { anonKey: storedAnonKey, isLoaded: isAnonLoaded } = useAnonKey();
   const { weightUnit, convertWeight } = useWeightUnit();
+  const { effectiveColorScheme } = useThemeMode();
+  const isDark = effectiveColorScheme === 'dark';
+
   const template = useQuery(api.templates.getById, templateId ? { templateId } : 'skip');
   const exercises = useQuery(api.exercises.getMultiple, 
     template ? { exerciseIds: template.items.map(item => item.exerciseId) } : 'skip'
@@ -65,7 +69,6 @@ export default function WorkoutSetupScreen() {
   const recordAssessment = useMutation(api.sessions.recordAssessment);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [assessmentData, setAssessmentData] = useState<Record<string, { value: number; type: '1rm' | 'working' }>>({});
   const [step, setStep] = useState<'assessment' | 'weights'>('assessment');
   const [plannedWeights, setPlannedWeights] = useState<Record<string, number>>({});
@@ -87,22 +90,14 @@ export default function WorkoutSetupScreen() {
     const weightedByOrder = itemsSorted
       .map((it: any) => (exercises as any[]).find((ex: any) => ex._id === it.exerciseId))
       .filter((ex: any) => ex && ex.isWeighted);
-    const questions: Array<{ exercise: any; type: '1rm' | 'working'; question: string }> = [];
-    if (weightedByOrder.length === 0) return questions;
+    if (weightedByOrder.length === 0) return [];
+    
     const primary = weightedByOrder[0];
-    questions.push({
+    return [{
       exercise: primary,
-      type: '1rm',
-      question: `If you had to do 1 rep max on ${primary.name.toLowerCase()}, how much do you think you could do?`
-    });
-    weightedByOrder.slice(1).forEach((ex: any) => {
-      questions.push({
-        exercise: ex,
-        type: 'working',
-        question: `For ${ex.name.toLowerCase()}, what weight would you typically use for a moderate set?`
-      });
-    });
-    return questions;
+      type: '1rm' as const,
+      question: `What's your estimated 1RM for ${primary.name.toLowerCase()}?`
+    }];
   }, [template, exercises]);
 
   const isLikelyDumbbellName = (name: string): boolean => {
@@ -110,94 +105,93 @@ export default function WorkoutSetupScreen() {
     return n.includes('dumbbell') || n.includes('lunge');
   };
 
-  const currentQuestion = assessmentQuestions[currentQuestionIndex];
-  const isLastQuestion = currentQuestionIndex === assessmentQuestions.length - 1;
-
+  const currentQuestion = assessmentQuestions[0];
   const [currentAnswer, setCurrentAnswer] = useState('');
   const [dontKnow, setDontKnow] = useState(false);
 
-  const roundGym = (weight: number, exerciseMeta?: any): number => {
-    const incKg = exerciseMeta?.roundingIncrementKg ?? 2.5;
-    const incLbs = exerciseMeta?.roundingIncrementLbs ?? (exerciseMeta?.equipment === 'dumbbell' ? 5 : 2.5);
-    if (weightUnit === 'kg') return Math.round(weight / incKg) * incKg;
-    return Math.round(weight / 5) * 5;
-  };
+  const roundGym = useCallback(
+    (weight: number, exerciseMeta?: any): number =>
+      roundGymDisplayWeight(weight, weightUnit, exerciseMeta),
+    [weightUnit]
+  );
 
-  const calculateSuggestedWeight = (baseWeight: number, baseType: '1rm' | 'working', targetReps: number, exerciseMeta?: any): number => {
-    const assumedWorkingReps = 10;
-    let estimatedOneRm = baseWeight;
-    if (baseType === 'working') {
-      estimatedOneRm = baseWeight * (1 + assumedWorkingReps / 30);
-    }
-    const raw = estimatedOneRm / (1 + targetReps / 30);
-    return roundGym(raw, exerciseMeta);
-  };
+  const calculateSuggestedWeight = useCallback(
+    (baseWeight: number, baseType: '1rm' | 'working', targetReps: number, exerciseMeta?: any): number => {
+      const assumedWorkingReps = 10;
+      let estimatedOneRm = baseWeight;
+      if (baseType === 'working') {
+        estimatedOneRm = baseWeight * (1 + assumedWorkingReps / 30);
+      }
+      const raw = estimatedOneRm / (1 + targetReps / 30);
+      return roundGym(raw, exerciseMeta);
+    },
+    [roundGym]
+  );
 
-  const estimateFromKeyExercises = () => {
-    if (!template || !exercises) return {};
-    
-    const suggestions: Record<string, number> = {};
-    const weightedExercises = exercises.filter((ex: any) => ex.isWeighted);
-    
-    // Get assessment data for key exercises
-    const assessedExercises = Object.keys(assessmentData);
-    
-    template.items.forEach((item: any) => {
-      const ex = weightedExercises.find((e: any) => e._id === item.exerciseId);
-      if (!ex) return;
-      const exMeta = ex;
-      
-      const avgReps = item.sets.reduce((acc: number, s: any) => acc + s.reps, 0) / item.sets.length;
-      
-      // If this exercise was assessed directly
-      const latest = (latestAssessments as any)?.[item.exerciseId];
-      const progression = (progressions as any)?.[item.exerciseId];
-      const lastCompletedKg = (latestCompleted as any)?.[item.exerciseId];
-      if (assessedExercises.includes(item.exerciseId) || latest || progression?.nextPlannedWeightKg !== undefined || lastCompletedKg !== undefined) {
-        const data = assessedExercises.includes(item.exerciseId)
-          ? assessmentData[item.exerciseId]
-          : latest
-            ? { value: latest.value, type: latest.type }
-            : progression?.nextPlannedWeightKg !== undefined
-              ? { value: convertWeight(progression.nextPlannedWeightKg, 'kg', weightUnit), type: 'working' }
-              : { value: convertWeight(lastCompletedKg, 'kg', weightUnit), type: 'working' };
-        suggestions[item.exerciseId] = calculateSuggestedWeight(data.value, data.type, avgReps, exMeta);
-        return;
-      }
-      
-      // Estimate based on similar exercise type
-      const bodyPartKeys = keyExercisesByBodyPart[template.bodyPart] || { press: [], pull: [] };
-      const isPress = bodyPartKeys.press?.some(name => ex.name.includes(name.split(' ')[0]));
-      const isPull = bodyPartKeys.pull?.some(name => ex.name.includes(name.split(' ')[0]));
-      
-      // Find similar assessed exercise
-      let baseExercise = null;
-      let multiplier = 0.8; // Conservative estimate
-      
-      if (isPress) {
-        baseExercise = assessedExercises.find(id => {
-          const assessedEx = exercises.find(e => e._id === id);
-          return assessedEx && bodyPartKeys.press?.some(name => assessedEx.name.includes(name.split(' ')[0]));
-        });
-        multiplier = 0.8; // Press exercises similar, keep conservative
-      } else if (isPull) {
-        baseExercise = assessedExercises.find(id => {
-          const assessedEx = exercises.find(e => e._id === id);
-          return assessedEx && bodyPartKeys.pull?.some(name => assessedEx.name.includes(name.split(' ')[0]));
-        });
-        multiplier = 0.75; // Pull exercises vary more
-      }
-      
-      if (baseExercise) {
-        const baseData = assessmentData[baseExercise];
-        const adjustedBase = baseData.value * multiplier;
-        const estimatedWeight = calculateSuggestedWeight(adjustedBase, baseData.type, avgReps, exMeta);
-        suggestions[item.exerciseId] = estimatedWeight;
-      }
-    });
-    
-    return suggestions;
-  };
+  const estimateFromKeyExercises = useCallback(
+    (overrideAssessments?: Record<string, { value: number; type: '1rm' | 'working' }>) => {
+      if (!template || !exercises) return {};
+
+      const suggestions: Record<string, number> = {};
+      const weightedExercises = exercises.filter((ex: any) => ex.isWeighted);
+      const effectiveAssessments = overrideAssessments ?? assessmentData;
+      const assessedExercises = Object.keys(effectiveAssessments);
+
+      template.items.forEach((item: any) => {
+        const ex = weightedExercises.find((e: any) => e._id === item.exerciseId);
+        if (!ex) return;
+        const exMeta = ex;
+
+        const avgReps = item.sets.reduce((acc: number, s: any) => acc + s.reps, 0) / item.sets.length;
+
+        const latest = (latestAssessments as any)?.[item.exerciseId];
+        const progression = (progressions as any)?.[item.exerciseId];
+        const lastCompletedKg = (latestCompleted as any)?.[item.exerciseId];
+        if (assessedExercises.includes(item.exerciseId) || latest || progression?.nextPlannedWeightKg !== undefined || lastCompletedKg !== undefined) {
+          const data = assessedExercises.includes(item.exerciseId)
+            ? effectiveAssessments[item.exerciseId]
+            : latest
+              ? { value: latest.value, type: latest.type }
+              : progression?.nextPlannedWeightKg !== undefined
+                ? { value: convertWeight(progression.nextPlannedWeightKg, 'kg', weightUnit), type: 'working' as const }
+                : { value: convertWeight(lastCompletedKg, 'kg', weightUnit), type: 'working' as const };
+          suggestions[item.exerciseId] = calculateSuggestedWeight(data.value, data.type, avgReps, exMeta);
+          return;
+        }
+
+        const bodyPartKeys = keyExercisesByBodyPart[template.bodyPart] || { press: [], pull: [] };
+        const isPress = bodyPartKeys.press?.some(name => ex.name.includes(name.split(' ')[0]));
+        const isPull = bodyPartKeys.pull?.some(name => ex.name.includes(name.split(' ')[0]));
+
+        let baseExercise = null;
+        let multiplier = 0.8;
+
+        if (isPress) {
+          baseExercise = assessedExercises.find(id => {
+            const assessedEx = exercises.find(e => e._id === id);
+            return assessedEx && bodyPartKeys.press?.some(name => assessedEx.name.includes(name.split(' ')[0]));
+          });
+          multiplier = 0.8;
+        } else if (isPull) {
+          baseExercise = assessedExercises.find(id => {
+            const assessedEx = exercises.find(e => e._id === id);
+            return assessedEx && bodyPartKeys.pull?.some(name => assessedEx.name.includes(name.split(' ')[0]));
+          });
+          multiplier = 0.75;
+        }
+
+        if (baseExercise) {
+          const baseData = effectiveAssessments[baseExercise];
+          const adjustedBase = baseData.value * multiplier;
+          const estimatedWeight = calculateSuggestedWeight(adjustedBase, baseData.type, avgReps, exMeta);
+          suggestions[item.exerciseId] = estimatedWeight;
+        }
+      });
+
+      return suggestions;
+    },
+    [template, exercises, assessmentData, latestAssessments, progressions, latestCompleted, convertWeight, weightUnit, calculateSuggestedWeight]
+  );
 
   useEffect(() => {
     if (!currentQuestion) return;
@@ -227,7 +221,7 @@ export default function WorkoutSetupScreen() {
     }
     const rounded = roundGym(prefFill, currentQuestion.exercise);
     setCurrentAnswer(String(rounded));
-  }, [currentQuestion, latestAssessments, progressions, latestCompleted, weightUnit]);
+  }, [currentQuestion, latestAssessments, progressions, latestCompleted, weightUnit, currentAnswer, convertWeight, roundGym]);
 
   const onAnswerQuestion = () => {
     if (!currentQuestion || !currentAnswer) return;
@@ -235,31 +229,24 @@ export default function WorkoutSetupScreen() {
     const value = Number(currentAnswer.replace(/[^0-9.]/g, ''));
     if (isNaN(value) || value <= 0) return;
     
-    setAssessmentData(prev => ({
-      ...prev,
-      [currentQuestion.exercise._id]: {
-        value,
-        type: dontKnow ? 'working' : currentQuestion.type
-      }
-    }));
-    // Persist assessment
+    const effectiveType = (dontKnow ? 'working' : currentQuestion.type) as '1rm' | 'working';
+    const updatedData = {
+      ...assessmentData,
+      [currentQuestion.exercise._id]: { value, type: effectiveType }
+    };
+    
+    setAssessmentData(updatedData);
     recordAssessment({
-      userId: user ? undefined : undefined,
       anonKey: user ? undefined : (storedAnonKey || undefined),
       exerciseId: currentQuestion.exercise._id,
-      type: (dontKnow ? 'working' : currentQuestion.type) as any,
+      type: effectiveType as any,
       value,
       unit: weightUnit as any,
     });
     
-    if (isLastQuestion) {
-      // Generate suggestions and move to weight planning
-      const suggestions = estimateFromKeyExercises();
-      setPlannedWeights(suggestions);
-      setStep('weights');
-    } else {
-      setCurrentQuestionIndex(prev => prev + 1);
-    }
+    const suggestions = estimateFromKeyExercises(updatedData);
+    setPlannedWeights(suggestions);
+    setStep('weights');
     
     setCurrentAnswer('');
     setDontKnow(false);
@@ -271,24 +258,26 @@ export default function WorkoutSetupScreen() {
     setIsStartingWorkout(true);
     
     try {
-      const weightsInKg: Record<string, number> = {};
-      Object.entries(plannedWeights).forEach(([exerciseId, weight]) => {
-        const rounded = roundGym(weight);
-        weightsInKg[exerciseId] = convertWeight(rounded, weightUnit, 'kg');
-      });
+      const weightsInKg = buildPlannedWeightsInKg(
+        plannedWeights,
+        weightUnit,
+        (exercises ?? []) as any[],
+        convertWeight
+      );
       
       const sessionId = await startFromTemplate({ 
         templateId: template._id,
-        userId: user ? undefined : undefined,
         anonKey: user ? undefined : (storedAnonKey || undefined),
         plannedWeights: weightsInKg,
       });
       try { await AsyncStorage.setItem('z-fit-active-session-id', String(sessionId)); } catch {}
       router.push(`/workout/${sessionId}`);
-    } catch (error) {
+    } catch {
       setIsStartingWorkout(false);
+      Alert.alert('Failed to start workout', 'Something went wrong. Please try again.');
     }
   };
+
   useEffect(() => {
     if (step !== 'assessment') return;
     if (!template || !exercises) return;
@@ -297,7 +286,7 @@ export default function WorkoutSetupScreen() {
       setPlannedWeights(suggestions);
       setStep('weights');
     }
-  }, [step, template, exercises, assessmentQuestions]);
+  }, [step, template, exercises, assessmentQuestions, estimateFromKeyExercises]);
 
   useEffect(() => {
     if (step !== 'weights') return;
@@ -313,7 +302,35 @@ export default function WorkoutSetupScreen() {
       });
       return next;
     });
-  }, [step, latestAssessments, progressions, latestCompleted, exercises, template, weightUnit]);
+  }, [step, latestAssessments, progressions, latestCompleted, exercises, template, weightUnit, estimateFromKeyExercises]);
+
+  const inputStyle = {
+    minWidth: 140,
+    borderColor: isDark ? '#495057' : '#CED4DA',
+    borderWidth: 2,
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    fontSize: 24,
+    fontWeight: '700' as const,
+    textAlign: 'center' as const,
+    backgroundColor: isDark ? '#343A40' : '#F8F9FA',
+    color: isDark ? '#F8F9FA' : '#212529',
+  };
+
+  const smallInputStyle = {
+    minWidth: 120,
+    borderColor: isDark ? '#495057' : '#CED4DA',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    fontWeight: '600' as const,
+    textAlign: 'center' as const,
+    backgroundColor: isDark ? '#343A40' : '#F8F9FA',
+    color: isDark ? '#F8F9FA' : '#212529',
+  };
 
   if (!template) {
     return (
@@ -350,7 +367,7 @@ export default function WorkoutSetupScreen() {
             sx={{ _dark: { color: '$textDark300' } }}
             textAlign="center"
           >
-            Preparing questions...
+            Preparing...
           </Text>
         </Box>
       );
@@ -364,45 +381,26 @@ export default function WorkoutSetupScreen() {
       >
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <VStack space="2xl" p={24} pb={120}>
-            {/* Progress indicator */}
-            <VStack space="md" pt={16}>
-              <HStack justifyContent="space-between" alignItems="center">
-                <Text 
-                  size="sm" 
-                  color="$textLight300"
-                  sx={{ _dark: { color: '$textDark300' } }}
-                  textTransform="uppercase"
-                  letterSpacing={1}
-                >
-                  Question {currentQuestionIndex + 1} of {assessmentQuestions.length}
-                </Text>
-                <Text 
-                  size="sm" 
-                  color="$textLight300"
-                  sx={{ _dark: { color: '$textDark300' } }}
-                >
-                  {Math.round(((currentQuestionIndex + 1) / assessmentQuestions.length) * 100)}%
-                </Text>
-              </HStack>
-              
-              <Box 
-                bg="$backgroundLight100" 
-                sx={{ _dark: { bg: '$backgroundDark100' } }}
-                borderRadius={999} 
-                h={6} 
-                overflow="hidden"
+            <VStack space="sm" pt={32}>
+              <Text 
+                size="sm" 
+                color="$textLight300"
+                sx={{ _dark: { color: '$textDark300' } }}
+                textTransform="uppercase"
+                letterSpacing={1}
               >
-                <Box 
-                  bg="$primary0"
-                  sx={{ _dark: { bg: '$textDark0' } }}
-                  h="100%" 
-                  borderRadius={999}
-                  style={{ width: `${((currentQuestionIndex + 1) / assessmentQuestions.length) * 100}%` }}
-                />
-              </Box>
+                Quick Calibration
+              </Text>
+              <Text 
+                size="3xl" 
+                fontWeight="$bold" 
+                color="$textLight0"
+                sx={{ _dark: { color: '$textDark0' } }}
+              >
+                {template.name}
+              </Text>
             </VStack>
 
-            {/* Main question card */}
             <Box
               bg="$cardLight"
               sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
@@ -421,32 +419,36 @@ export default function WorkoutSetupScreen() {
                     sx={{ _dark: { color: '$textDark0' } }}
                     textAlign="center"
                   >
-                    {isLikelyDumbbellName(currentQuestion.exercise.name)
-                      ? `${currentQuestion.question} (per dumbbell)`
-                      : currentQuestion.question}
+                    {dontKnow
+                      ? `What's a comfortable working weight for ${currentQuestion.exercise.name.toLowerCase()}?`
+                      : isLikelyDumbbellName(currentQuestion.exercise.name)
+                        ? `${currentQuestion.question} (per dumbbell)`
+                        : currentQuestion.question}
                   </Text>
                   
-                  {currentQuestion.type === '1rm' && (
-                    <Button 
-                      variant="outline" 
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onPress={() => setDontKnow(!dontKnow)}
+                    borderColor={dontKnow ? '$primary0' : '$borderLight0'}
+                    sx={{ 
+                      _dark: { 
+                        borderColor: dontKnow ? '$textDark0' : '$borderDark0',
+                        bg: dontKnow ? '$textDark0' : 'transparent'
+                      } 
+                    }}
+                    borderRadius={12}
+                    bg={dontKnow ? "$primary0" : "transparent"}
+                  >
+                    <Text 
+                      color={dontKnow ? "$backgroundLight0" : "$textLight300"}
+                      sx={{ _dark: { color: dontKnow ? '$backgroundDark0' : '$textDark300' } }}
                       size="sm"
-                      onPress={() => setDontKnow(!dontKnow)}
-                      borderColor="$borderLight0"
-                      sx={{ _dark: { borderColor: '$borderDark0' } }}
-                      borderRadius={12}
-                      bg={dontKnow ? "$primary0" : "transparent"}
-                      sx={dontKnow ? { _dark: { bg: '$textDark0' } } : { _dark: { bg: 'transparent' } }}
+                      fontWeight="$medium"
                     >
-                      <Text 
-                        color={dontKnow ? "$backgroundLight0" : "$textLight300"}
-                        sx={dontKnow ? { _dark: { color: '$backgroundDark0' } } : { _dark: { color: '$textDark300' } }}
-                        size="sm"
-                        fontWeight="$medium"
-                      >
-                        {dontKnow ? 'I know my 1RM' : "I don't know my 1RM"}
-                      </Text>
-                    </Button>
-                  )}
+                      {dontKnow ? 'I know my 1RM' : "I don't know my 1RM"}
+                    </Text>
+                  </Button>
                 </VStack>
 
                 <VStack alignItems="center" space="lg">
@@ -458,7 +460,7 @@ export default function WorkoutSetupScreen() {
                       textTransform="uppercase"
                       letterSpacing={1}
                     >
-                      {dontKnow ? `Working Weight (${weightUnit})` : `${currentQuestion.type === '1rm' ? '1RM' : 'Weight'} (${weightUnit})`}
+                      {dontKnow ? `Working Weight (${weightUnit})` : `1RM (${weightUnit})`}
                     </Text>
                     <HStack alignItems="center" space="sm">
                       <Button
@@ -468,9 +470,9 @@ export default function WorkoutSetupScreen() {
                         sx={{ _dark: { borderColor: '$borderDark0' } }}
                         borderRadius={12}
                         onPress={() => {
-                          const step = weightUnit === 'kg' ? 2.5 : 5;
+                          const inc = getDisplayIncrement(weightUnit, currentQuestion.exercise);
                           const num = Number((currentAnswer || '0').replace(/[^0-9.]/g, '')) || 0;
-                          const next = Math.max(0, num - step);
+                          const next = Math.max(0, num - inc);
                           const rounded = roundGym(next, currentQuestion.exercise);
                           setCurrentAnswer(String(rounded));
                         }}
@@ -480,20 +482,10 @@ export default function WorkoutSetupScreen() {
                       <TextInput
                         keyboardType="numeric"
                         placeholder={weightUnit === 'kg' ? (dontKnow ? '60' : '80') : (dontKnow ? '135' : '175')}
+                        placeholderTextColor={isDark ? '#6C757D' : '#ADB5BD'}
                         value={currentAnswer}
                         onChangeText={setCurrentAnswer}
-                        style={{
-                          minWidth: 140,
-                          borderColor: '#CED4DA',
-                          borderWidth: 2,
-                          borderRadius: 16,
-                          paddingHorizontal: 20,
-                          paddingVertical: 16,
-                          fontSize: 24,
-                          fontWeight: '700',
-                          textAlign: 'center',
-                          backgroundColor: '#F8F9FA',
-                        }}
+                        style={inputStyle}
                       />
                       <Button
                         variant="outline"
@@ -502,9 +494,9 @@ export default function WorkoutSetupScreen() {
                         sx={{ _dark: { borderColor: '$borderDark0' } }}
                         borderRadius={12}
                         onPress={() => {
-                          const step = weightUnit === 'kg' ? 2.5 : 5;
+                          const inc = getDisplayIncrement(weightUnit, currentQuestion.exercise);
                           const num = Number((currentAnswer || '0').replace(/[^0-9.]/g, '')) || 0;
-                          const next = num + step;
+                          const next = num + inc;
                           const rounded = roundGym(next, currentQuestion.exercise);
                           setCurrentAnswer(String(rounded));
                         }}
@@ -534,7 +526,7 @@ export default function WorkoutSetupScreen() {
                       textAlign="center"
                       flex={1}
                     >
-                      {isLastQuestion ? 'Generate Workout Plan' : 'Next Question'}
+                      Plan My Weights
                     </Text>
                   </Button>
 
@@ -548,7 +540,7 @@ export default function WorkoutSetupScreen() {
                     }}
                   >
                     <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                      Skip assessment for now
+                      Skip and use defaults
                     </Text>
                   </Button>
                 </VStack>
@@ -582,7 +574,7 @@ export default function WorkoutSetupScreen() {
               color="$textLight300"
               sx={{ _dark: { color: '$textDark300' } }}
             >
-              Adjust suggested weights based on your strength assessment
+              Adjust suggested weights for each exercise
             </Text>
           </VStack>
 
@@ -629,7 +621,7 @@ export default function WorkoutSetupScreen() {
                         color="$textLight300"
                         sx={{ _dark: { color: '$textDark300' } }}
                       >
-                        {item.sets.length} sets • {item.sets.map((s: any) => s.reps).join(', ')} reps
+                        {item.sets.length} sets · {item.sets.map((s: any) => s.reps).join(', ')} reps
                       </Text>
                     </VStack>
                     
@@ -650,9 +642,9 @@ export default function WorkoutSetupScreen() {
                           sx={{ _dark: { borderColor: '$borderDark0' } }}
                           borderRadius={12}
                           onPress={() => {
-                            const step = weightUnit === 'kg' ? 2.5 : 5;
+                            const inc = getDisplayIncrement(weightUnit, exMeta);
                             const cur = plannedWeights[item.exerciseId] ?? 0;
-                            const next = Math.max(0, cur - step);
+                            const next = Math.max(0, cur - inc);
                             const rounded = roundGym(next, exMeta);
                             setPlannedWeights(prev => ({ ...prev, [item.exerciseId]: rounded }));
                           }}
@@ -662,6 +654,7 @@ export default function WorkoutSetupScreen() {
                         <TextInput
                           keyboardType="numeric"
                           placeholder="0"
+                          placeholderTextColor={isDark ? '#6C757D' : '#ADB5BD'}
                           value={String(plannedWeights[item.exerciseId] ?? '')}
                           onChangeText={(t) => {
                             const cleaned = (t || '').replace(/[^0-9.]/g, '');
@@ -675,18 +668,7 @@ export default function WorkoutSetupScreen() {
                             const num = Number(cleaned);
                             setPlannedWeights(prev => ({ ...prev, [item.exerciseId]: isNaN(num) ? 0 : num }));
                           }}
-                          style={{
-                            minWidth: 120,
-                            borderColor: '#CED4DA',
-                            borderWidth: 1,
-                            borderRadius: 12,
-                            paddingHorizontal: 16,
-                            paddingVertical: 12,
-                            fontSize: 16,
-                            fontWeight: '600',
-                            textAlign: 'center',
-                            backgroundColor: '#F8F9FA',
-                          }}
+                          style={smallInputStyle}
                         />
                         <Button
                           variant="outline"
@@ -695,9 +677,9 @@ export default function WorkoutSetupScreen() {
                           sx={{ _dark: { borderColor: '$borderDark0' } }}
                           borderRadius={12}
                           onPress={() => {
-                            const step = weightUnit === 'kg' ? 2.5 : 5;
+                            const inc = getDisplayIncrement(weightUnit, exMeta);
                             const cur = plannedWeights[item.exerciseId] ?? 0;
-                            const next = cur + step;
+                            const next = cur + inc;
                             const rounded = roundGym(next, exMeta);
                             setPlannedWeights(prev => ({ ...prev, [item.exerciseId]: rounded }));
                           }}
@@ -713,7 +695,7 @@ export default function WorkoutSetupScreen() {
                       onPress={() => setWhyOpen(prev => ({ ...prev, [item.exerciseId]: !prev[item.exerciseId] }))}
                     >
                       <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                        {whyOpen[item.exerciseId] ? 'Hide details' : 'Why this suggestion?'}
+                        {whyOpen[item.exerciseId] ? 'Hide details' : 'Why this weight?'}
                       </Text>
                     </Button>
                     {whyOpen[item.exerciseId] && (() => {
@@ -732,23 +714,23 @@ export default function WorkoutSetupScreen() {
                       const finalPlanned = plannedWeights[item.exerciseId] ?? rounded;
                       const incText = weightUnit === 'kg'
                         ? `${exMeta.roundingIncrementKg ?? 2.5} kg`
-                        : `${exMeta.roundingIncrementLbs ?? (exMeta.equipment === 'dumbbell' ? 5 : 2.5)} lb`;
+                        : '5 lb';
                       return (
                         <Box bg="$backgroundLight0" sx={{ _dark: { bg: '$backgroundDark0' } }} borderRadius={12} p={12}>
                           <VStack space="xs">
                             <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                              Based on Epley: 1RM / (1 + reps/30). Rounding increment: {incText}.
+                              Based on Epley formula. Rounding: {incText}.
                             </Text>
                             <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
                               Target reps: {item.sets.map((s: any) => s.reps).join(', ')}
                             </Text>
                             {base && (
                               <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                                1RM used: {Math.round(estimated1RM)} {weightUnit}{baseType === 'working' ? ' (estimated from working weight)' : ''}
+                                Est. 1RM: {Math.round(estimated1RM)} {weightUnit}{baseType === 'working' ? ' (from working weight)' : ''}
                               </Text>
                             )}
                             <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                              Suggested (rounded): {Math.round(finalPlanned)} {weightUnit}
+                              Suggested: {Math.round(finalPlanned)} {weightUnit}
                             </Text>
                           </VStack>
                         </Box>
@@ -763,7 +745,11 @@ export default function WorkoutSetupScreen() {
           <HStack justifyContent="space-between" alignItems="center">
             <Button 
               variant="outline" 
-              onPress={() => setStep('assessment')}
+              onPress={() => {
+                setStep('assessment');
+                setCurrentAnswer('');
+                setDontKnow(false);
+              }}
               borderColor="$borderLight0"
               sx={{ _dark: { borderColor: '$borderDark0' } }}
               borderRadius={16}

@@ -24,7 +24,10 @@ function extractSessionIdFromUrl(url: string): string | null {
 }
 
 export default function ActiveSessionResume() {
-  const currentPath = usePathname();
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+  useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
+
   const appState = useRef(AppState.currentState);
   const isNavigatingRef = useRef(false);
 
@@ -33,28 +36,28 @@ export default function ActiveSessionResume() {
       const initialUrl = await Linking.getInitialURL();
       if (initialUrl) {
         const id = extractSessionIdFromUrl(initialUrl);
-        if (id) {
-          if (!currentPath?.startsWith(`/workout/${id}`)) router.replace(`/workout/${id}`);
+        if (id && !pathnameRef.current?.startsWith(`/workout/${id}`)) {
+          router.replace(`/workout/${id}`);
           return;
         }
       }
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored && !currentPath?.startsWith(`/workout/${stored}`)) {
+      if (stored && !pathnameRef.current?.startsWith(`/workout/${stored}`)) {
         router.replace(`/workout/${stored}`);
       }
     };
     handleInitialUrl();
-  }, [currentPath]);
+  }, []);
 
   useEffect(() => {
     const sub = Linking.addEventListener('url', ({ url }) => {
       const id = extractSessionIdFromUrl(url);
-      if (id && !currentPath?.startsWith(`/workout/${id}`)) {
+      if (id && !pathnameRef.current?.startsWith(`/workout/${id}`)) {
         router.replace(`/workout/${id}`);
       }
     });
     return () => sub.remove();
-  }, [currentPath]);
+  }, []);
 
   useEffect(() => {
     const handleChange = async (nextState: string) => {
@@ -63,7 +66,7 @@ export default function ActiveSessionResume() {
         isNavigatingRef.current = true;
         try {
           const stored = await AsyncStorage.getItem(STORAGE_KEY);
-          if (stored && !currentPath?.startsWith(`/workout/${stored}`)) {
+          if (stored && !pathnameRef.current?.startsWith(`/workout/${stored}`)) {
             router.replace(`/workout/${stored}`);
           }
         } finally {
@@ -74,9 +77,7 @@ export default function ActiveSessionResume() {
     };
     const subscription = AppState.addEventListener('change', handleChange);
     return () => subscription.remove();
-  }, [currentPath]);
+  }, []);
 
   return null;
 }
-
-

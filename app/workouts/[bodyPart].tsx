@@ -1,6 +1,6 @@
 import { api } from '@/convex/_generated/api';
 
-import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
+import { Box, Button, Text, VStack } from '@gluestack-ui/themed';
 import { useQuery } from 'convex/react';
 import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -132,47 +132,13 @@ export default function WorkoutsByBodyPartScreen() {
                   </VStack>
                   
                   <VStack space="md">
-                    <HStack alignItems="center">
-                      <Box 
-                        bg="$backgroundLight0" 
-                        borderColor="$borderLight0" 
-                        borderWidth={1} 
-                        borderRadius={999} 
-                        px={12} 
-                        py={6}
-                        sx={{ _dark: { bg: '$backgroundDark0', borderColor: '$borderDark0' } }}
-                      >
-                        <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>{template.items.length} exercises</Text>
-                      </Box>
-                      <Box 
-                        ml={8}
-                        bg="$backgroundLight0" 
-                        borderColor="$borderLight0" 
-                        borderWidth={1} 
-                        borderRadius={999} 
-                        px={12} 
-                        py={6}
-                        sx={{ _dark: { bg: '$backgroundDark0', borderColor: '$borderDark0' } }}
-                      >
-                        <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                          {template.items.reduce((acc: number, it: any) => acc + it.sets.length, 0)} sets
-                        </Text>
-                      </Box>
-                      <Box 
-                        ml={8}
-                        bg="$backgroundLight0" 
-                        borderColor="$borderLight0" 
-                        borderWidth={1} 
-                        borderRadius={999} 
-                        px={12} 
-                        py={6}
-                        sx={{ _dark: { bg: '$backgroundDark0', borderColor: '$borderDark0' } }}
-                      >
-                        <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                          {Math.max(1, Math.round(((template.items.flatMap((it: any) => it.sets).reduce((acc: number, s: any) => acc + (s.restSec ?? 60), 0)) + (template.items.flatMap((it: any) => it.sets).length * 40)) / 60))} min
-                        </Text>
-                      </Box>
-                    </HStack>
+                    <Text 
+                      size="sm" 
+                      color="$textLight300"
+                      sx={{ _dark: { color: '$textDark300' } }}
+                    >
+                      {template.items.length} exercises · {template.items.reduce((acc: number, it: any) => acc + it.sets.length, 0)} sets · ~{Math.max(1, Math.round(((template.items.flatMap((it: any) => it.sets).reduce((acc: number, s: any) => acc + (s.restSec ?? 60), 0)) + (template.items.flatMap((it: any) => it.sets).length * 40)) / 60))} min
+                    </Text>
 
                     <VStack space="xs">
                       <Text 
@@ -225,7 +191,20 @@ export default function WorkoutsByBodyPartScreen() {
               </Box>
             ))}
 
-            {(!templates || templates.length === 0) && (
+            {templates === undefined && (
+              <Box p={24} alignItems="center">
+                <Text 
+                  size="md" 
+                  color="$textLight300"
+                  sx={{ _dark: { color: '$textDark300' } }}
+                  textAlign="center"
+                >
+                  Loading workouts...
+                </Text>
+              </Box>
+            )}
+
+            {templates !== undefined && templates.length === 0 && (
               <Box
                 bg="$cardLight"
                 sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
@@ -234,7 +213,7 @@ export default function WorkoutsByBodyPartScreen() {
                 borderRadius={16}
                 p={24}
               >
-                <VStack space="lg" alignItems="center">
+                <VStack space="sm" alignItems="center">
                   <Text 
                     size="md" 
                     color="$textLight200"

@@ -2,12 +2,14 @@ import { api } from '@/convex/_generated/api';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useWorkoutLiveActivity } from '@/hooks/useLiveActivity';
 import { useWeightUnit } from '@/hooks/useWeightUnit';
+import { getDisplayIncrement } from '@/utils/workoutPlanning';
 import { Ionicons } from '@expo/vector-icons';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
 import { useMutation, useQuery } from 'convex/react';
 import * as Haptics from 'expo-haptics';
+import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet } from 'react-native';
 import Animated, {
     useAnimatedStyle,
@@ -33,6 +35,20 @@ export default function WorkoutSessionScreen() {
   const { weightUnit, convertWeight, formatWeight } = useWeightUnit();
   const colorScheme = useColorScheme();
   const session = useQuery(api.sessions.getSession, sessionId ? { sessionId } : 'skip');
+  const exerciseIds = useMemo(() => {
+    if (!session) return [];
+    const ids = new Set<string>();
+    session.exercises.forEach((ex: any) => {
+      if (ex.exerciseId) ids.add(ex.exerciseId);
+    });
+    return Array.from(ids);
+  }, [session]);
+  const exerciseMeta = useQuery(
+    api.exercises.getMultiple,
+    exerciseIds.length ? { exerciseIds: exerciseIds as any } : 'skip'
+  );
+  const sessionRef = useRef(session);
+  useEffect(() => { sessionRef.current = session; }, [session]);
   const markSetDone = useMutation(api.sessions.markSetDone);
   const completeSession = useMutation(api.sessions.completeSession);
   const updatePlannedWeight = useMutation(api.sessions.updatePlannedWeight);
@@ -171,10 +187,19 @@ export default function WorkoutSessionScreen() {
         setOverlayExerciseComplete(false);
         setOverlayExerciseName('');
         
-        const exercise = session.exercises[currentExerciseIndex];
+        const latestSession = sessionRef.current;
+        if (!latestSession) { setIsMarkingSet(false); return; }
+        
+        const exercise = latestSession.exercises[currentExerciseIndex];
         const nextSetIndex = currentSetIndex + 1;
         const nextExerciseIndex = currentExerciseIndex + 1;
-        const isWorkoutComplete = (completedSets + 1) === totalSets;
+        const latestCompleted = latestSession.exercises.reduce(
+          (acc: number, ex: any) => acc + ex.sets.filter((s: any) => s.done).length, 0
+        );
+        const latestTotal = latestSession.exercises.reduce(
+          (acc: number, ex: any) => acc + ex.sets.length, 0
+        );
+        const isWorkoutComplete = latestCompleted >= latestTotal;
         
         if (isWorkoutComplete) {
           setTimeout(() => {
@@ -185,7 +210,8 @@ export default function WorkoutSessionScreen() {
             celebrationScale.value = withSpring(1, { damping: 10, stiffness: 300 });
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
             
-            const missing = session.exercises
+            const freshSession = sessionRef.current;
+            const missing = (freshSession ?? latestSession).exercises
               .filter((ex: any) => ex.sets.some((st: any) => st.weight !== undefined))
               .filter((ex: any) => ex.rir === undefined);
 
@@ -199,7 +225,7 @@ export default function WorkoutSessionScreen() {
         
         const groupId = exercise.groupId;
         if (groupId) {
-          const groupMembers = session.exercises
+          const groupMembers = latestSession.exercises
             .map((ex: any, idx: number) => ({ ex, idx }))
             .filter(({ ex }) => ex.groupId === groupId)
             .sort((a, b) => (a.ex.groupOrder || 0) - (b.ex.groupOrder || 0) || a.idx - b.idx);
@@ -219,10 +245,10 @@ export default function WorkoutSessionScreen() {
           if (!advanced) {
             if (nextSetIndex < exercise.sets.length) {
               setCurrentSetIndex(nextSetIndex);
-            } else if (nextExerciseIndex < session.exercises.length) {
+            } else if (nextExerciseIndex < latestSession.exercises.length) {
               let idx = nextExerciseIndex;
-              while (idx < session.exercises.length) {
-                const nEx = session.exercises[idx];
+              while (idx < latestSession.exercises.length) {
+                const nEx = latestSession.exercises[idx];
                 const nUndone = nEx.sets.findIndex((st: any) => !st.done);
                 if (nUndone !== -1) {
                   setCurrentExerciseIndex(idx);
@@ -236,8 +262,8 @@ export default function WorkoutSessionScreen() {
         } else {
           if (nextSetIndex < exercise.sets.length) {
             setCurrentSetIndex(nextSetIndex);
-          } else if (nextExerciseIndex < session.exercises.length) {
-            const nextEx = session.exercises[nextExerciseIndex];
+          } else if (nextExerciseIndex < latestSession.exercises.length) {
+            const nextEx = latestSession.exercises[nextExerciseIndex];
             const nUndone = nextEx.sets.findIndex((st: any) => !st.done);
             setCurrentExerciseIndex(nextExerciseIndex);
             setCurrentSetIndex(nUndone === -1 ? 0 : nUndone);
@@ -396,14 +422,6 @@ export default function WorkoutSessionScreen() {
 
   
 
-  if (!session) {
-    return (
-      <Box bg="$background" flex={1} p={16} justifyContent="center">
-        <Text size="lg" color="$textMuted" textAlign="center">Loading workout...</Text>
-      </Box>
-    );
-  }
-
   const onNext = () => {
     if (!session) return;
     const exercise = session.exercises[currentExerciseIndex];
@@ -427,12 +445,42 @@ export default function WorkoutSessionScreen() {
   };
 
 
-  const currentExercise = session!.exercises[currentExerciseIndex];
+  const currentExercise = session?.exercises[currentExerciseIndex];
+  const currentExerciseMeta = (exerciseMeta ?? []).find((e: any) => e._id === currentExercise?.exerciseId);
   const currentSet = currentExercise?.sets[currentSetIndex];
+  const currentGifUrl = (currentExercise as any)?.gifUrl || (currentExerciseMeta as any)?.gifUrl;
   const isAnyOverlayActive = isSetOverlayActive || isWorkoutOverlayActive;
   const markDisabled = !!currentSet?.done || isMarkingSet || isAnyOverlayActive;
   const prevDisabled = (currentExerciseIndex === 0 && currentSetIndex === 0) || isMarkingSet || isAnyOverlayActive;
   const nextDisabled = isMarkingSet || isAnyOverlayActive;
+
+  useEffect(() => {
+    if (!exerciseMeta || exerciseMeta.length === 0) return;
+    const urls = exerciseMeta
+      .map((e: any) => e?.gifUrl)
+      .filter(Boolean)
+      .slice(0, 8) as string[];
+    urls.forEach((url) => {
+      try {
+        ExpoImage.prefetch(url).catch(() => {});
+      } catch {}
+    });
+  }, [exerciseMeta]);
+
+  useEffect(() => {
+    if (!currentGifUrl) return;
+    try {
+      ExpoImage.prefetch(currentGifUrl).catch(() => {});
+    } catch {}
+  }, [currentGifUrl]);
+
+  if (!session || !currentExercise) {
+    return (
+      <Box bg="$background" flex={1} p={16} justifyContent="center">
+        <Text size="lg" color="$textMuted" textAlign="center">Loading workout...</Text>
+      </Box>
+    );
+  }
 
 
   return (
@@ -443,7 +491,7 @@ export default function WorkoutSessionScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <VStack space="2xl" p={24} pb={120}>
-          {!showRoadmap && (
+          {!showRoadmap && !helpVisible && (
             <HeaderProgress
               completedSets={completedSets}
               totalSets={totalSets}
@@ -582,7 +630,7 @@ export default function WorkoutSessionScreen() {
                 weightUnit={weightUnit}
                 onWeightAdjust={currentExercise?.loadBasis === 'external' ? async (delta: number) => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  const step = weightUnit === 'kg' ? 2.5 : 5;
+                  const step = getDisplayIncrement(weightUnit, currentExercise as any);
                   const currentDisplay = convertWeight(currentSet?.weight || 0, 'kg', weightUnit);
                   const nextDisplay = Math.max(0, currentDisplay + (delta * step));
                   const nextKg = convertWeight(nextDisplay, weightUnit, 'kg');
@@ -590,67 +638,6 @@ export default function WorkoutSessionScreen() {
                 } : undefined}
               />
 
-
-              {restRemainingSec !== null && (
-                <Box
-                  bg="$backgroundLight100"
-                  sx={{ _dark: { bg: '$backgroundDark100' } }}
-                  borderRadius={12}
-                  p={12}
-                  w="100%"
-                >
-                  <HStack justifyContent="space-between" alignItems="center" space="md">
-                    <HStack alignItems="center" space="sm" flex={1}>
-                      <Box
-                        bg="$primary0"
-                        sx={{ _dark: { bg: '$textDark0' } }}
-                        borderRadius={999}
-                        w={32}
-                        h={32}
-                        justifyContent="center"
-                        alignItems="center"
-                      >
-                        <Text 
-                          size="sm" 
-                          fontWeight="$bold" 
-                          color="$backgroundLight0"
-                          sx={{ _dark: { color: '$backgroundDark0' } }}
-                        >
-                          {restRemainingSec}
-                        </Text>
-                      </Box>
-                      <Text 
-                        size="sm" 
-                        color="$textLight0"
-                        sx={{ _dark: { color: '$textDark0' } }}
-                        fontWeight="$medium"
-                        flex={1}
-                      >
-                        Rest Time
-                      </Text>
-                    </HStack>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onPress={() => setRestRemainingSec(null)}
-                      borderColor="$borderLight0"
-                      sx={{ _dark: { borderColor: '$borderDark0' } }}
-                      borderRadius={8}
-                      px={10}
-                      h={28}
-                    >
-                      <Text 
-                        color="$textLight0"
-                        sx={{ _dark: { color: '$textDark0' } }}
-                        size="xs"
-                        fontWeight="$medium"
-                      >
-                        Skip
-                      </Text>
-                    </Button>
-                  </HStack>
-                </Box>
-              )}
 
               <Animated.View style={buttonAnimatedStyle}>
                 <Button 
@@ -735,20 +722,23 @@ export default function WorkoutSessionScreen() {
             />
           </Box>
 
-          <WorkoutRoadmapModal
-            visible={showRoadmap}
-            exercises={session!.exercises as any}
-            currentExerciseIndex={currentExerciseIndex}
-            onClose={() => setShowRoadmap(false)}
-          />
+        </VStack>
+      </ScrollView>
+
+      <WorkoutRoadmapModal
+        visible={showRoadmap}
+        exercises={session!.exercises as any}
+        currentExerciseIndex={currentExerciseIndex}
+        onClose={() => setShowRoadmap(false)}
+      />
+
       <ExerciseHelpModal
         visible={helpVisible}
         name={currentExercise?.exerciseName}
         exerciseId={currentExercise?.exerciseId as any}
+        gifUrl={currentGifUrl}
         onClose={() => setHelpVisible(false)}
       />
-        </VStack>
-      </ScrollView>
 
       <WorkoutCompleteOverlay
         isActive={isWorkoutOverlayActive}

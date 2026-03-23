@@ -140,7 +140,7 @@ export const startFromTemplate = mutation({
             rir: undefined,
             sets: item.sets.map((s: any) => ({ 
               reps: s.reps, 
-              weight: plannedWeight || s.weight, 
+              weight: plannedWeight ?? s.weight, 
               done: false 
             })),
           };

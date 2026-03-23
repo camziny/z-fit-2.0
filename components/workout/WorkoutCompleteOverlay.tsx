@@ -11,7 +11,7 @@ import Animated, {
 
 type Exercise = {
   exerciseName?: string;
-  sets: Array<{ weight?: number } & Record<string, any>>;
+  sets: ({ weight?: number } & Record<string, any>)[];
   rir?: number;
 };
 

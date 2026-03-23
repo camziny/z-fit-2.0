@@ -1,17 +1,13 @@
 import { api } from '@/convex/_generated/api';
-import { useThemeMode } from '@/hooks/useThemeMode';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { Avatar, AvatarFallbackText, AvatarImage, Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
 import { useQuery } from 'convex/react';
 import { router } from 'expo-router';
-import { Dimensions, ScrollView, StyleSheet } from 'react-native';
-
-const { width } = Dimensions.get('window');
+import { ScrollView, StyleSheet } from 'react-native';
 
 export default function ProfileScreen() {
   const { isSignedIn, user } = useUser();
   const { signOut } = useAuth();
-  const { effectiveColorScheme } = useThemeMode();
   const convexUser = useQuery(
     api.users.me,
     isSignedIn && user ? { clerkUserId: user.id } : 'skip'
@@ -20,8 +16,6 @@ export default function ProfileScreen() {
     api.sessions.historyForUser,
     convexUser ? { userId: convexUser._id } : 'skip'
   );
-
-  const isDark = effectiveColorScheme === 'dark';
 
   const completedWorkouts = userHistory?.filter((s: any) => s.status === 'completed') || [];
   
@@ -38,22 +32,35 @@ export default function ProfileScreen() {
     ).length;
   });
 
-  const totalSets = completedWorkouts.reduce((total: number, session: any) => 
-    total + session.exercises.reduce((acc: number, ex: any) => 
-      acc + ex.sets.filter((set: any) => set.done).length, 0
-    ), 0
-  );
-
-  const avgSetsPerWorkout = completedWorkouts.length > 0 
-    ? Math.round(totalSets / completedWorkouts.length) 
-    : 0;
-
   const thisWeekWorkouts = completedWorkouts.filter((session: any) => {
     const sessionDate = new Date(session.completedAt);
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
     return sessionDate >= weekAgo;
   }).length;
+
+  const workoutDays = new Set(
+    completedWorkouts.map((session: any) => {
+      const d = new Date(session.completedAt);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime();
+    })
+  );
+
+  const sortedCompleted = [...completedWorkouts].sort(
+    (a: any, b: any) => (b.completedAt || 0) - (a.completedAt || 0)
+  );
+
+  let currentStreak = 0;
+  if (sortedCompleted.length > 0) {
+    const cursor = new Date(sortedCompleted[0].completedAt);
+    cursor.setHours(0, 0, 0, 0);
+    while (workoutDays.has(cursor.getTime())) {
+      currentStreak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+  }
+
 
   return (
     <Box 
@@ -205,7 +212,7 @@ export default function ProfileScreen() {
                         color="$primary0"
                         sx={{ _dark: { color: '$textDark0' } }}
                       >
-                        {avgSetsPerWorkout}
+                        {currentStreak}
                       </Text>
                       <Text 
                         size="xs" 
@@ -214,7 +221,7 @@ export default function ProfileScreen() {
                         fontWeight="$medium"
                         textAlign="center"
                       >
-                        Avg Sets{'\n'}Per Workout
+                        Day{'\n'}Streak
                       </Text>
                     </VStack>
                   </HStack>
@@ -237,11 +244,11 @@ export default function ProfileScreen() {
                     color="$textLight0"
                     sx={{ _dark: { color: '$textDark0' } }}
                   >
-                    This Week's Activity
+                    This Week&apos;s Activity
                   </Text>
                   <HStack space="sm" justifyContent="space-between" w="100%">
                     {last7Days.map((date, index) => {
-                      const hasWorkout = workoutsPerDay[index] > 0;
+                      const count = workoutsPerDay[index];
                       const isToday = date.toDateString() === new Date().toDateString();
                       
                       return (
@@ -256,16 +263,14 @@ export default function ProfileScreen() {
                             {date.toLocaleDateString('en-US', { weekday: 'short' })}
                           </Text>
                           <Box
-                            bg={hasWorkout ? '$primary0' : '$backgroundLight100'}
-                            sx={hasWorkout 
-                              ? { _dark: { bg: '$textDark0' } } 
-                              : { _dark: { bg: '$backgroundDark100' } }
-                            }
+                            bg={count > 0 ? '$primary0' : '$backgroundLight100'}
                             borderColor={isToday ? '$primary0' : 'transparent'}
-                            sx={isToday 
-                              ? { _dark: { borderColor: '$textDark0' } } 
-                              : { _dark: { borderColor: 'transparent' } }
-                            }
+                            sx={{
+                              _dark: {
+                                bg: count > 0 ? '$textDark0' : '$backgroundDark100',
+                                borderColor: isToday ? '$textDark0' : 'transparent',
+                              },
+                            }}
                             borderWidth={isToday ? 2 : 0}
                             borderRadius={8}
                             w={32}
@@ -273,14 +278,14 @@ export default function ProfileScreen() {
                             justifyContent="center"
                             alignItems="center"
                           >
-                            {hasWorkout ? (
+                            {count > 0 ? (
                               <Text 
                                 color="$backgroundLight0"
                                 sx={{ _dark: { color: '$backgroundDark0' } }}
                                 fontWeight="$bold"
                                 size="sm"
                               >
-                                ✓
+                                {count}
                               </Text>
                             ) : (
                               <Text 
@@ -289,7 +294,7 @@ export default function ProfileScreen() {
                                 fontWeight="$medium"
                                 size="xs"
                               >
-                                {date.getDate()}
+                                -
                               </Text>
                             )}
                           </Box>

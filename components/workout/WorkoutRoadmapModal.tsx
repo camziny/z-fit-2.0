@@ -1,11 +1,11 @@
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Ionicons } from '@expo/vector-icons';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
-import { ScrollView, View } from 'react-native';
+import { ScrollView, useWindowDimensions } from 'react-native';
 
 type Exercise = {
   exerciseName?: string;
-  sets: Array<{ done?: boolean } & Record<string, any>>;
+  sets: ({ done?: boolean } & Record<string, any>)[];
 };
 
 type Props = {
@@ -17,6 +17,8 @@ type Props = {
 
 export default function WorkoutRoadmapModal({ visible, exercises, currentExerciseIndex, onClose }: Props) {
   const colorScheme = useColorScheme();
+  const { height } = useWindowDimensions();
+  const listMaxHeight = Math.max(220, Math.min(520, Math.round(height * 0.55)));
   
   if (!visible) return null;
 
@@ -40,9 +42,10 @@ export default function WorkoutRoadmapModal({ visible, exercises, currentExercis
         borderRadius={20}
         p={24}
         w="100%"
-        maxHeight="80%"
+        maxHeight="88%"
+        overflow="hidden"
       >
-        <VStack space="lg">
+        <VStack space="lg" flexShrink={1}>
           <HStack justifyContent="space-between" alignItems="center">
             <Text size="xl" fontWeight="$bold" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }}>
               Workout Progress
@@ -61,14 +64,13 @@ export default function WorkoutRoadmapModal({ visible, exercises, currentExercis
             </Button>
           </HStack>
 
-          <View style={{ height: 500, overflow: 'hidden' }}>
-            <ScrollView 
-              showsVerticalScrollIndicator={false}
-              style={{ flex: 1 }}
-              contentContainerStyle={{ paddingBottom: 16 }}
-            >
-              <VStack space="sm">
-                {exercises.map((ex, idx) => {
+          <ScrollView 
+            showsVerticalScrollIndicator={false}
+            style={{ maxHeight: listMaxHeight, width: '100%' }}
+            contentContainerStyle={{ paddingBottom: 16 }}
+          >
+            <VStack space="sm">
+              {exercises.map((ex, idx) => {
                 const doneSets = ex.sets.filter((s) => s.done).length;
                 const total = ex.sets.length;
                 const allDone = doneSets === total;
@@ -92,8 +94,8 @@ export default function WorkoutRoadmapModal({ visible, exercises, currentExercis
                               name="shuffle"
                               size={16}
                               color={isActive 
-                                ? (colorScheme === 'dark' ? '#FFFFFF' : '#000000')  // Active: match text on primary bg
-                                : (colorScheme === 'dark' ? '#FFFFFF' : '#000000')  // Inactive: match text on card bg
+                                ? (colorScheme === 'dark' ? '#FFFFFF' : '#000000')
+                                : (colorScheme === 'dark' ? '#FFFFFF' : '#000000')
                               }
                             />
                           )}
@@ -131,9 +133,8 @@ export default function WorkoutRoadmapModal({ visible, exercises, currentExercis
                   </Box>
                 );
                 })}
-              </VStack>
-            </ScrollView>
-          </View>
+            </VStack>
+          </ScrollView>
         </VStack>
       </Box>
     </Box>

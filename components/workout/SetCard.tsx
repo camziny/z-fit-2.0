@@ -1,9 +1,5 @@
-// import { useColorScheme } from '@/hooks/useColorScheme';
 import type { WorkoutExercise, WorkoutSet } from '@/types/workout';
-import { Ionicons } from '@expo/vector-icons';
 import { Box, HStack, Pressable, Text, VStack } from '@gluestack-ui/themed';
-import { useState } from 'react';
-import ExerciseHelpModal from './ExerciseHelpModal';
 
 export interface SetCardProps {
   currentExercise: WorkoutExercise;
@@ -16,10 +12,6 @@ export interface SetCardProps {
 }
 
 export default function SetCard({ currentExercise, currentSet, currentSetIndex, formatWeight, convertWeight, weightUnit, onWeightAdjust }: SetCardProps) {
-  // const isSuperset = !!(currentExercise as any)?.groupId;
-  // const colorScheme = useColorScheme();
-  const [helpVisible, setHelpVisible] = useState(false);
-  
   return (
     <VStack alignItems="center" space="lg">
       <Box
@@ -30,11 +22,6 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
         w="100%"
         alignItems="center"
       >
-        <Pressable onPress={() => setHelpVisible(true)} style={{ position: 'absolute', top: 16, right: 16 }}>
-          <Box bg="$backgroundLight0" borderRadius={999} w={36} h={36} justifyContent="center" alignItems="center" borderColor="$borderLight0" borderWidth={1} sx={{ _dark: { bg: '$backgroundDark0', borderColor: '$borderDark0' } }}>
-            <Ionicons name="videocam" size={18} color="#6C757D" />
-          </Box>
-        </Pressable>
         <VStack alignItems="center" space="sm">
           <Box
             bg="$primary0"
@@ -215,25 +202,19 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
                 const impl = eq === 'kettlebell' ? 'kettlebells' : 'dumbbells';
                 const per = convertWeight((currentSet.weight || 0) / 2, 'kg', weightUnit);
                 const perText = formatWeight(per).replace(` ${weightUnit}`, '');
-                return `Use 2 × ${perText} ${weightUnit} ${impl}`;
+                return `Use 2 x ${perText} ${weightUnit} ${impl}`;
               }
               if (lm === 'single') {
                 const impl = eq === 'kettlebell' ? 'kettlebell' : 'dumbbell';
                 const one = convertWeight(currentSet.weight || 0, 'kg', weightUnit);
                 const oneText = formatWeight(one).replace(` ${weightUnit}`, '');
-                return `Use 1 × ${oneText} ${weightUnit} ${impl}`;
-              }
-              if (lm === 'bar') {
-                return '';
+                return `Use 1 x ${oneText} ${weightUnit} ${impl}`;
               }
               return '';
             })()}
           </Text>
         )}
       </VStack>
-      <ExerciseHelpModal visible={helpVisible} name={currentExercise?.exerciseName} exerciseId={(currentExercise as any)?.exerciseId} gifUrl={(currentExercise as any)?.gifUrl} onClose={() => setHelpVisible(false)} />
     </VStack>
   );
 }
-
-

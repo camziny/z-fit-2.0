@@ -7,13 +7,15 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { ConvexReactClient } from 'convex/react';
 import { ConvexProviderWithClerk } from 'convex/react-clerk';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { theme } from '../gluestack-theme';
 
 import 'react-native-reanimated';
 
 import { useThemeMode } from '@/hooks/useThemeMode';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Pressable } from 'react-native';
 
 export default function RootLayout() {
   const { effectiveColorScheme, isLoaded } = useThemeMode();
@@ -72,6 +74,22 @@ export default function RootLayout() {
                 options={{ 
                   headerShown: true,
                   title: 'Active Workout',
+                  headerBackVisible: false,
+                  headerLeft: () => (
+                    <Pressable
+                      onPress={() => {
+                        if (router.canGoBack()) router.back();
+                        else router.replace('/(tabs)');
+                      }}
+                      style={{ paddingHorizontal: 6, paddingVertical: 4 }}
+                    >
+                      <Ionicons
+                        name="arrow-back"
+                        size={22}
+                        color={effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529'}
+                      />
+                    </Pressable>
+                  ),
                   headerStyle: { backgroundColor: effectiveColorScheme === 'dark' ? '#343A40' : '#F8F9FA' },
                   headerTintColor: effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529',
                 }} 
