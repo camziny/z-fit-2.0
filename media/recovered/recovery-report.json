@@ -1,0 +1,423 @@
+{
+  "totalExercises": 47,
+  "aliveCount": 0,
+  "downloadedCount": 0,
+  "report": [
+    {
+      "exerciseName": "Barbell Deadlift",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/2abccd812618472ca4556c13567ebbe6.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Chest Supported Row",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/9c8acf9ca35b4441bc7f96e1f426e3a4.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Dumbbell Pullover",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/ab0f57296b38407bb0b4dd4c5997325a.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Dumbbell High Pull",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/d5f0da2c175c417d9fb11d0c5ad972d9.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Chin-up",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/d1e6c0f4955146318dad2257e9844949.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Overhead Triceps Extension",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/685284b4ea4b4fdf9a0c87fbbdc92750.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Angels and Devils",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/0e7c8796222f4634991799d613962612.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Snatch Grip Deadlift",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/faeaf79426e944069ceecca780609811.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Pull-up (Weighted)",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/f04405bd1cc94982b7c3dbb8d4a52fec.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Dumbbell Gorilla Row",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/5df3f91ac56c4536a09638bd987bfdc4.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Straight Arm Pushdown",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/c750ae80b14048b2b28c248549f8adc3.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Barbell Curl",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/6fb60ee1390a4f6783323c87181d3e67.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Triceps Pushdown",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/3ca3a0452a694ad98166686d2c24c766.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Face Pull",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/47ee0c1af32d439d8c856d9a946505cb.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "V-Handle Pulldown",
+      "urls": []
+    },
+    {
+      "exerciseName": "Dual Pulley Standing Cable Row",
+      "urls": []
+    },
+    {
+      "exerciseName": "Dead Shrug",
+      "urls": []
+    },
+    {
+      "exerciseName": "Barbell Bench Press",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/390a73473a42448a967164890032f112.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Hi-to-Low Cable Crossover",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/3aa0fe49f0c84e6289b713d09e8a07b5.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Dumbbell Shoulder Press",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/d013e3ad8b564265adf59671822da311.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "1.5 Side Lateral Raise",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/8e6ca57ce5bd4570a35626cbf92bc528.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Lying Triceps Extension",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/e9ce07eae0fd4863888649b7a169e8c7.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Dumbbell Waiter's Curl",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/9d8e725754264951b27c687ec54a9b2b.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Rotator Cuff External Rotation",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/b04c6b960b5946ec95e2f2de536f1a62.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Barbell Overhead Press",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/9a9835b7b82b4ceb8b000f4b994957dd.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Underhand Dumbbell Bench Press",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/b1aa3f5be0a74227beb08b861c5765ad.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Dumbbell Abduction Row",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/7025f49c021b4c0b91b270703d3fc0ed.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Dumbbell Floor Fly",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/94376af6d13a4a92b4fbb4158c24bcd2.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Close Grip Bench Press",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/c1c40723f7484744adffac3773ff2e50.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Dumbbell Curl",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/4c327af5f80b4216aaed8b64c102458a.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Push-up Plus",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/36254676f6864a43b1df5eeabdd3d446.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Back Squat",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/09e58bee64be42a49ed7ec31c72afee6.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Barbell Hip Thrust",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/3ba2cee4839c4ccab265ea17798c597c.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Dumbbell Reverse Lunge",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/e6b1b1ff125c41d2bc77be360702060f.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Single Leg RDL",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/669b45dbd44040fcab42e6dc32606fae.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Barbell Calf Raise",
+      "urls": []
+    },
+    {
+      "exerciseName": "Reverse Hyper",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/31e154c3d58247a495e3ba260d0dd07b.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Glute Ham Raise",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/1a3e4613ddab466584520b63fd529962.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Harop Curl",
+      "urls": []
+    },
+    {
+      "exerciseName": "Dumbbell Bulgarian Split Squat",
+      "urls": []
+    },
+    {
+      "exerciseName": "Romanian Deadlift",
+      "urls": []
+    },
+    {
+      "exerciseName": "Terminal Knee Extension",
+      "urls": []
+    },
+    {
+      "exerciseName": "Standing Calf Raise",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/bc95aa4259bc42eb936ad39f5f49e296.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Hip Abduction",
+      "urls": []
+    },
+    {
+      "exerciseName": "Trap Bar Deadlift",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/f0be73631edf4e2f90ca8e20dd430c31.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Front Squat",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/5d11b2ca3b244bb99c507ec281ac4af6.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    },
+    {
+      "exerciseName": "Seated Hamstring Curl",
+      "urls": [
+        {
+          "url": "https://gifrun.blob.core.windows.net/temp/b3ba88705e56460eb943a6242a24e834.gif",
+          "status": 404,
+          "alive": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import { useAnonKey } from '@/hooks/useAnonKey';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import { useWeightUnit } from '@/hooks/useWeightUnit';
@@ -46,23 +47,23 @@ export default function WorkoutSetupScreen() {
   const { effectiveColorScheme } = useThemeMode();
   const isDark = effectiveColorScheme === 'dark';
 
-  const template = useQuery(api.templates.getById, templateId ? { templateId } : 'skip');
+  const template = useQuery(api.templates.getById, templateId ? { templateId: templateId as Id<'templates'> } : 'skip');
   const exercises = useQuery(api.exercises.getMultiple, 
-    template ? { exerciseIds: template.items.map(item => item.exerciseId) } : 'skip'
+    template ? { exerciseIds: template.items.map((item: any) => item.exerciseId) } : 'skip'
   );
   const progressions = useQuery(api.sessions.getProgressionsForExercises,
-    template ? { userId: undefined as any, exerciseIds: template.items.map(item => item.exerciseId) } : 'skip'
+    template ? { userId: undefined as any, exerciseIds: template.items.map((item: any) => item.exerciseId) } : 'skip'
   );
   const latestCompleted = useQuery(
     api.sessions.getLatestCompletedWeights,
     template && (user || isAnonLoaded)
-      ? { userId: undefined as any, anonKey: user ? undefined : (storedAnonKey || undefined), exerciseIds: template.items.map(item => item.exerciseId) }
+      ? { userId: undefined as any, anonKey: user ? undefined : (storedAnonKey || undefined), exerciseIds: template.items.map((item: any) => item.exerciseId) }
       : 'skip'
   );
   const latestAssessments = useQuery(
     api.sessions.getLatestAssessments,
     template && exercises && (user || isAnonLoaded)
-      ? { userId: undefined as any, anonKey: user ? undefined : (storedAnonKey || undefined), exerciseIds: template.items.map(i => i.exerciseId) }
+      ? { userId: undefined as any, anonKey: user ? undefined : (storedAnonKey || undefined), exerciseIds: template.items.map((i: any) => i.exerciseId) }
       : 'skip'
   );
   const startFromTemplate = useMutation(api.sessions.startFromTemplate);
@@ -79,12 +80,12 @@ export default function WorkoutSetupScreen() {
     try {
       const idsInTemplate = new Set(template.items.map((i: any) => i.exerciseId));
       const inOrder = (exercises as any[]).filter((e: any) => idsInTemplate.has(e._id));
-      const toPrefetch = inOrder.map((e: any) => e.gifUrl).filter(Boolean).slice(0, 4) as string[];
+      const toPrefetch = inOrder.map((e: any) => e.mediaGifUrl || e.gifUrl).filter(Boolean).slice(0, 4) as string[];
       toPrefetch.forEach((u) => { try { ExpoImage.prefetch(u).catch(() => {}); } catch {} });
     } catch {}
   }, [template, exercises]);
 
-  const assessmentQuestions = useMemo(() => {
+  const assessmentQuestions = useMemo<{ exercise: any; type: '1rm' | 'working'; question: string }[]>(() => {
     if (!template || !exercises) return [];
     const itemsSorted = [...(template.items || [])].sort((a: any, b: any) => a.order - b.order);
     const weightedByOrder = itemsSorted
@@ -147,14 +148,14 @@ export default function WorkoutSetupScreen() {
         const latest = (latestAssessments as any)?.[item.exerciseId];
         const progression = (progressions as any)?.[item.exerciseId];
         const lastCompletedKg = (latestCompleted as any)?.[item.exerciseId];
-        if (assessedExercises.includes(item.exerciseId) || latest || progression?.nextPlannedWeightKg !== undefined || lastCompletedKg !== undefined) {
+        if (assessedExercises.includes(item.exerciseId) || latest || lastCompletedKg !== undefined || progression?.nextPlannedWeightKg !== undefined) {
           const data = assessedExercises.includes(item.exerciseId)
             ? effectiveAssessments[item.exerciseId]
             : latest
               ? { value: latest.value, type: latest.type }
-              : progression?.nextPlannedWeightKg !== undefined
-                ? { value: convertWeight(progression.nextPlannedWeightKg, 'kg', weightUnit), type: 'working' as const }
-                : { value: convertWeight(lastCompletedKg, 'kg', weightUnit), type: 'working' as const };
+              : lastCompletedKg !== undefined
+                ? { value: convertWeight(lastCompletedKg, 'kg', weightUnit), type: 'working' as const }
+                : { value: convertWeight(progression.nextPlannedWeightKg, 'kg', weightUnit), type: 'working' as const };
           suggestions[item.exerciseId] = calculateSuggestedWeight(data.value, data.type, avgReps, exMeta);
           return;
         }
@@ -168,13 +169,13 @@ export default function WorkoutSetupScreen() {
 
         if (isPress) {
           baseExercise = assessedExercises.find(id => {
-            const assessedEx = exercises.find(e => e._id === id);
+            const assessedEx = exercises.find((e: any) => e._id === id);
             return assessedEx && bodyPartKeys.press?.some(name => assessedEx.name.includes(name.split(' ')[0]));
           });
           multiplier = 0.8;
         } else if (isPull) {
           baseExercise = assessedExercises.find(id => {
-            const assessedEx = exercises.find(e => e._id === id);
+            const assessedEx = exercises.find((e: any) => e._id === id);
             return assessedEx && bodyPartKeys.pull?.some(name => assessedEx.name.includes(name.split(' ')[0]));
           });
           multiplier = 0.75;
@@ -205,11 +206,11 @@ export default function WorkoutSetupScreen() {
       const baseUnit = (latest.unit as any) || weightUnit;
       baseValInCurrentUnit = convertWeight(latest.value, baseUnit, weightUnit as any);
       baseType = latest.type;
-    } else if (progression?.nextPlannedWeightKg !== undefined) {
-      baseValInCurrentUnit = convertWeight(progression.nextPlannedWeightKg, 'kg', weightUnit as any);
-      baseType = 'working';
     } else if (lastCompletedKg !== undefined) {
       baseValInCurrentUnit = convertWeight(lastCompletedKg, 'kg', weightUnit as any);
+      baseType = 'working';
+    } else if (progression?.nextPlannedWeightKg !== undefined) {
+      baseValInCurrentUnit = convertWeight(progression.nextPlannedWeightKg, 'kg', weightUnit as any);
       baseType = 'working';
     }
     if (baseValInCurrentUnit === undefined) return;
@@ -295,12 +296,14 @@ export default function WorkoutSetupScreen() {
     if (!suggestions || Object.keys(suggestions).length === 0) return;
     setPlannedWeights((prev: Record<string, number>) => {
       const next = { ...prev } as Record<string, number>;
+      let changed = false;
       template.items.forEach((item: any) => {
         if (next[item.exerciseId] === undefined && suggestions[item.exerciseId] !== undefined) {
           next[item.exerciseId] = suggestions[item.exerciseId];
+          changed = true;
         }
       });
-      return next;
+      return changed ? next : prev;
     });
   }, [step, latestAssessments, progressions, latestCompleted, exercises, template, weightUnit, estimateFromKeyExercises]);
 
@@ -703,7 +706,10 @@ export default function WorkoutSetupScreen() {
                       const local = assessmentData[item.exerciseId];
                       const base = local || latest;
                       const baseType = base ? base.type : 'working';
-                      const baseUnit = base ? base.unit || weightUnit : weightUnit;
+                      const baseUnit =
+                        base && typeof base === 'object' && 'unit' in base
+                          ? (((base as any).unit as string) || weightUnit)
+                          : weightUnit;
                       const baseValInCurrent = base ? convertWeight(base.value, baseUnit as any, weightUnit as any) : 0;
                       const estimated1RM = baseType === '1rm'
                         ? baseValInCurrent

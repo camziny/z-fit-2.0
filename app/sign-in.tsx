@@ -26,7 +26,7 @@ export default function SignInScreen() {
 
       if (signInAttempt.status === 'complete') {
         await setActive({ session: signInAttempt.createdSessionId });
-        router.replace('/(tabs)/');
+        router.replace('/(tabs)');
       } else {
         Alert.alert('Error', 'Sign in incomplete. Please try again.');
       }
@@ -42,7 +42,7 @@ export default function SignInScreen() {
       const { createdSessionId, setActive } = await startOAuthFlow();
       if (createdSessionId) {
         await setActive!({ session: createdSessionId });
-        router.replace('/(tabs)/');
+        router.replace('/(tabs)');
       }
     } catch (err: any) {
       Alert.alert('Error', err?.errors?.[0]?.message || 'Failed to sign in with Google');

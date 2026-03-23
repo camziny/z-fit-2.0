@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, usePathname } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { AppState, Linking } from 'react-native';
+import { AppState, Linking, type AppStateStatus } from 'react-native';
 
 const STORAGE_KEY = 'z-fit-active-session-id';
 
@@ -28,7 +28,7 @@ export default function ActiveSessionResume() {
   const pathnameRef = useRef(pathname);
   useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
 
-  const appState = useRef(AppState.currentState);
+  const appState = useRef<AppStateStatus>(AppState.currentState);
   const isNavigatingRef = useRef(false);
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export default function ActiveSessionResume() {
   }, []);
 
   useEffect(() => {
-    const handleChange = async (nextState: string) => {
+    const handleChange = async (nextState: AppStateStatus) => {
       if (appState.current.match(/inactive|background/) && nextState === 'active') {
         if (isNavigatingRef.current) return;
         isNavigatingRef.current = true;

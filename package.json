@@ -10,7 +10,13 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "media:generate": "node scripts/generate-clips.mjs media/clips.manifest.json",
+    "media:check": "node scripts/check-media-links.mjs media/clips.manifest.json",
+    "media:apply": "node scripts/apply-media-manifest.mjs media/clips.manifest.json",
+    "media:export": "node scripts/export-exercise-media.mjs media/exercise-media-export.json",
+    "media:recover": "node scripts/recover-existing-media.mjs media/recovered",
+    "media:upload:convex": "node scripts/upload-media-to-convex-storage.mjs media/clips.manifest.json media/generated"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.14.25",
