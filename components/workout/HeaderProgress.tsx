@@ -2,7 +2,7 @@ import { Colors } from '@/constants/Colors';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { TouchableOpacity } from 'react-native';
 import Animated, {
     type SharedValue,
@@ -13,7 +13,7 @@ import Animated, {
 
 type Exercise = {
   exerciseName?: string;
-  sets: Array<{ done?: boolean } & Record<string, any>>;
+  sets: ({ done?: boolean } & Record<string, any>)[];
 };
 
 type Props = {
@@ -46,9 +46,6 @@ export default function HeaderProgress({
   onSkipRest
 }: Props) {
   const { effectiveColorScheme } = useThemeMode();
-  const currentExercise = exercises[currentExerciseIndex];
-  const currentSet = currentExercise?.sets[currentSetIndex];
-  const isCurrentSetCompleted = !!currentSet?.done;
   const currentPositionX = useSharedValue(0);
   
   const exerciseMarkers = useMemo(() => {
@@ -67,24 +64,22 @@ export default function HeaderProgress({
     });
   }, [exercises, totalSets]);
 
-  const currentSetProgress = useMemo(() => {
-    if (!exercises[currentExerciseIndex]) return 0;
-    
+  useEffect(() => {
+    if (!exercises[currentExerciseIndex]) return;
+
     let setsBeforeCurrent = 0;
     for (let i = 0; i < currentExerciseIndex; i++) {
       setsBeforeCurrent += exercises[i].sets.length;
     }
-    
+
     const currentPosition = setsBeforeCurrent + currentSetIndex;
     const newProgress = (currentPosition / totalSets) * 100;
-    
-    currentPositionX.value = withSpring(newProgress, { 
-      damping: 25, 
+
+    currentPositionX.value = withSpring(newProgress, {
+      damping: 25,
       stiffness: 120,
       mass: 0.8
     });
-    
-    return newProgress;
   }, [exercises, currentExerciseIndex, currentSetIndex, totalSets, currentPositionX]);
 
   const progressAnimatedStyle = useAnimatedStyle(() => {

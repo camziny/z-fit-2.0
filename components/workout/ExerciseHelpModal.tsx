@@ -2,10 +2,8 @@ import { api } from '@/convex/_generated/api';
 import { Box, HStack, Text } from '@gluestack-ui/themed';
 import { useQuery } from 'convex/react';
 import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import { ActivityIndicator, Pressable } from 'react-native';
 
 type Props = {
   visible: boolean;
@@ -15,41 +13,32 @@ type Props = {
   onClose: () => void;
 };
 
-const FALLBACK_GIF = 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbDNxNnRrZ2lwdDNsOGZ3aTByczVjYjZ1aXc5NmszMmQya21nZ3p5cCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/3oEjI6SIIHBdRxXI40/giphy.gif';
+const FALLBACK_GIF = 'https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif';
 
 function ModalContent({ name, exerciseId, gifUrl, onClose }: Omit<Props, 'visible'>) {
-  const exercise = useQuery(api.exercises.getMultiple, exerciseId ? { exerciseIds: [exerciseId as any] } : 'skip');
-  const resolvedGif = useMemo(() => gifUrl || (exercise && exercise[0]?.gifUrl) || FALLBACK_GIF, [gifUrl, exercise]);
+  const exercise = useQuery(
+    api.exercises.getMultiple,
+    exerciseId ? { exerciseIds: [exerciseId as any] } : 'skip'
+  );
+  const dbGifUrl = exercise?.[0]?.gifUrl;
+  const sources = useMemo(() => {
+    const ordered = [gifUrl, dbGifUrl, FALLBACK_GIF].filter(Boolean) as string[];
+    return Array.from(new Set(ordered));
+  }, [gifUrl, dbGifUrl]);
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const resolvedGif = sources[sourceIndex];
   const [loaded, setLoaded] = useState(false);
-  const pulse = useSharedValue(0.6);
-  const shimmerX = useSharedValue(-300);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    setSourceIndex(0);
     setLoaded(false);
-    pulse.value = 0.6;
-    shimmerX.value = -300;
-  }, [resolvedGif, pulse, shimmerX]);
-
-  useEffect(() => {
-    if (!loaded) {
-      pulse.value = withRepeat(withTiming(1, { duration: 800 }), -1, true);
-      shimmerX.value = withRepeat(withTiming(300, { duration: 1200 }), -1, false);
-    } else {
-      pulse.value = withTiming(0, { duration: 200 });
-      shimmerX.value = withTiming(-300, { duration: 200 });
-    }
-  }, [loaded, pulse, shimmerX]);
-
-  const placeholderStyle = useAnimatedStyle(() => {
-    return { opacity: pulse.value };
-  });
-  const shimmerStyle = useAnimatedStyle(() => {
-    return { transform: [{ translateX: shimmerX.value }] };
-  });
+    setFailed(false);
+  }, [gifUrl, dbGifUrl]);
 
   return (
     <Box position="absolute" top={0} left={0} right={0} bottom={0} bg="rgba(0,0,0,0.95)" justifyContent="center" alignItems="center">
-      <Pressable onPress={onClose} position="absolute" top={0} left={0} right={0} bottom={0} />
+      <Pressable onPress={onClose} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
       <Box w="95%" maxWidth={450} aspectRatio={1} position="relative">
         <Image
           source={{ uri: resolvedGif }}
@@ -57,25 +46,65 @@ function ModalContent({ name, exerciseId, gifUrl, onClose }: Omit<Props, 'visibl
           contentFit="contain"
           cachePolicy="disk"
           priority="high"
-          transition={200}
+          transition={0}
           recyclingKey={resolvedGif}
-          onLoadEnd={() => setLoaded(true)}
+          onLoad={() => setLoaded(true)}
+          onError={() => {
+            if (sourceIndex < sources.length - 1) {
+              setSourceIndex((prev) => prev + 1);
+              setLoaded(false);
+              return;
+            }
+            setFailed(true);
+            setLoaded(true);
+          }}
         />
-        {!loaded && (
-          <>
-            <Animated.View
-              pointerEvents="none"
-              style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 20, backgroundColor: '#E9ECEF' }, placeholderStyle]}
-            />
-            <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 0, bottom: 0, width: 180 }, shimmerStyle]}>
-              <LinearGradient
-                colors={["rgba(233,236,239,0)", "rgba(255,255,255,0.7)", "rgba(233,236,239,0)"]}
-                start={{ x: 0, y: 0.5 }}
-                end={{ x: 1, y: 0.5 }}
-                style={{ flex: 1, borderRadius: 20 }}
-              />
-            </Animated.View>
-          </>
+        {!loaded && !failed && (
+          <Box
+            position="absolute"
+            top={0}
+            left={0}
+            right={0}
+            bottom={0}
+            borderRadius={20}
+            bg="rgba(33,37,41,0.88)"
+            justifyContent="center"
+            alignItems="center"
+          >
+            <ActivityIndicator size="small" color="#DEE2E6" />
+            <Text size="xs" color="$textDark300" mt={8}>
+              Loading media...
+            </Text>
+          </Box>
+        )}
+        {failed && (
+          <Box
+            position="absolute"
+            top={0}
+            left={0}
+            right={0}
+            bottom={0}
+            borderRadius={20}
+            bg="$backgroundDark100"
+            justifyContent="center"
+            alignItems="center"
+            px={20}
+          >
+            <Text size="sm" color="$textDark200" textAlign="center">
+              Could not load this exercise media.
+            </Text>
+            <Pressable
+              onPress={() => {
+                setSourceIndex(0);
+                setLoaded(false);
+                setFailed(false);
+              }}
+            >
+              <Box mt={12} px={12} py={6} borderRadius={10} bg="$backgroundDark200">
+                <Text size="xs" color="$textDark50">Try again</Text>
+              </Box>
+            </Pressable>
+          </Box>
         )}
         <Box position="absolute" top={16} left={16} right={16}>
           <HStack justifyContent="space-between" alignItems="center">
@@ -86,7 +115,7 @@ function ModalContent({ name, exerciseId, gifUrl, onClose }: Omit<Props, 'visibl
             </Box>
             <Pressable onPress={onClose}>
               <Box bg="rgba(0,0,0,0.7)" borderRadius={20} w={36} h={36} justifyContent="center" alignItems="center">
-                <Text color="white" size="lg" fontWeight="$bold">×</Text>
+                <Text color="white" size="lg" fontWeight="$bold">x</Text>
               </Box>
             </Pressable>
           </HStack>
@@ -100,5 +129,3 @@ export default function ExerciseHelpModal({ visible, name, exerciseId, gifUrl, o
   if (!visible) return null;
   return <ModalContent name={name} exerciseId={exerciseId} gifUrl={gifUrl} onClose={onClose} />;
 }
-
-

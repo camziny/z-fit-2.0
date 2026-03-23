@@ -7,7 +7,7 @@ import { convertWeight as coreConvert, formatWeight as coreFormat } from '@/util
 const WEIGHT_UNIT_STORAGE_KEY = 'z-fit-weight-unit';
 
 export function useWeightUnit() {
-  const [weightUnit, setWeightUnitState] = useState<WeightUnit>('kg');
+  const [weightUnit, setWeightUnitState] = useState<WeightUnit>('lbs');
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {

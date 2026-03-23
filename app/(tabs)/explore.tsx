@@ -1,4 +1,6 @@
-import { Box, Pressable, Text, VStack } from '@gluestack-ui/themed';
+import { useThemeMode } from '@/hooks/useThemeMode';
+import { Ionicons } from '@expo/vector-icons';
+import { Box, HStack, Pressable, Text, VStack } from '@gluestack-ui/themed';
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet } from 'react-native';
 
@@ -14,6 +16,8 @@ const workoutCategories = [
 ];
 
 export default function ExploreScreen() {
+  const { effectiveColorScheme } = useThemeMode();
+  const isDark = effectiveColorScheme === 'dark';
 
   return (
     <Box 
@@ -37,13 +41,11 @@ export default function ExploreScreen() {
               color="$textLight300"
               sx={{ _dark: { color: '$textDark300' } }}
             >
-              Choose a category to start training
+              Choose a muscle group to start
             </Text>
           </VStack>
 
-          
-
-          <VStack space="md">
+          <VStack space="sm">
             {workoutCategories.map((category) => (
               <Pressable
                 key={category.bodyPart}
@@ -56,20 +58,26 @@ export default function ExploreScreen() {
                     borderColor="$borderLight0"
                     borderWidth={1}
                     borderRadius={16}
-                    p={24}
+                    px={20}
+                    py={18}
                     opacity={pressed ? 0.85 : 1}
                     transform={[{ scale: pressed ? 0.98 : 1 }]}
                   >
-                    <VStack space="sm">
+                    <HStack alignItems="center" justifyContent="space-between">
                       <Text 
-                        size="xl" 
+                        size="lg" 
                         fontWeight="$semibold" 
                         color="$textLight0"
                         sx={{ _dark: { color: '$textDark0' } }}
                       >
                         {category.name}
                       </Text>
-                    </VStack>
+                      <Ionicons 
+                        name="chevron-forward" 
+                        size={20} 
+                        color={isDark ? '#6C757D' : '#ADB5BD'} 
+                      />
+                    </HStack>
                   </Box>
                 )}
               </Pressable>

@@ -188,10 +188,6 @@ export default function SettingsScreen() {
                             ? '$primary0' 
                             : 'transparent'
                           }
-                          sx={weightUnit === option.value 
-                            ? { _dark: { bg: '$textDark0' } }
-                            : {}
-                          }
                           borderColor={weightUnit === option.value 
                             ? '$primary0' 
                             : '$borderLight0'

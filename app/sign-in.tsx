@@ -3,7 +3,7 @@ import { Box, Button, HStack, Input, InputField, Text, VStack } from '@gluestack
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
-import { Alert, StyleSheet } from 'react-native';
+import { Alert } from 'react-native';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -198,7 +198,3 @@ export default function SignInScreen() {
     </Box>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-});
