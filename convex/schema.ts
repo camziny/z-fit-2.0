@@ -13,6 +13,19 @@ export default defineSchema({
     bodyPart: v.string(),
     isWeighted: v.boolean(),
     gifUrl: v.optional(v.string()),
+    mediaGifUrl: v.optional(v.string()),
+    mediaMp4Url: v.optional(v.string()),
+    mediaGifStorageId: v.optional(v.id('_storage')),
+    mediaMp4StorageId: v.optional(v.id('_storage')),
+    mediaSource: v.optional(
+      v.object({
+        provider: v.optional(v.string()),
+        youtubeUrl: v.optional(v.string()),
+        sourceLabel: v.optional(v.string()),
+        sourceStartSec: v.optional(v.number()),
+        sourceEndSec: v.optional(v.number()),
+      })
+    ),
     description: v.optional(v.string()),
     equipment: v.optional(v.union(
       v.literal('barbell'),

@@ -19,6 +19,7 @@ type ActivityHandle = string | null;
 
 export function useWorkoutLiveActivity() {
   const activityRef = useRef<ActivityHandle>(null);
+  const nativeLiveActivities = LiveActivities as any;
 
   const isSupported = Platform.OS === 'ios' && !!LiveActivities;
 
@@ -39,7 +40,7 @@ export function useWorkoutLiveActivity() {
         isSuperset: !!data.isSuperset,
         supersetInfo: data.supersetInfo ?? undefined,
       };
-      const handle: string = await LiveActivities.startActivity(attributes, contentState);
+      const handle: string = await nativeLiveActivities.startActivity(attributes, contentState);
       activityRef.current = handle;
       return handle;
     } catch {
@@ -60,7 +61,7 @@ export function useWorkoutLiveActivity() {
         isSuperset: !!data.isSuperset,
         supersetInfo: data.supersetInfo ?? undefined,
       };
-      await LiveActivities.updateActivity(activityId, contentState);
+      await nativeLiveActivities.updateActivity(activityId, contentState);
     } catch {
       // swallow
     }
@@ -69,7 +70,11 @@ export function useWorkoutLiveActivity() {
   const endWorkoutActivity = async (activityId: string) => {
     if (!isSupported || !activityId) return;
     try {
-      await LiveActivities.endActivity(activityId);
+      if (typeof nativeLiveActivities.endActivity === 'function') {
+        await nativeLiveActivities.endActivity(activityId);
+      } else if (typeof nativeLiveActivities.endAllActivity === 'function') {
+        await nativeLiveActivities.endAllActivity();
+      }
       activityRef.current = null;
     } catch {
       // swallow

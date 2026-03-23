@@ -1,6 +1,8 @@
 import { createConfig } from '@gluestack-style/react';
 import { config as baseConfig } from '@gluestack-ui/config';
 
+const baseConfigAny = baseConfig as any;
+
 const gray = {
   50: '#F8F9FA',
   100: '#E9ECEF',
@@ -181,9 +183,9 @@ export const theme = createConfig({
     },
   },
   semanticTokens: {
-    ...baseConfig.semanticTokens,
+    ...baseConfigAny.semanticTokens,
     colors: {
-      ...baseConfig.semanticTokens?.colors,
+      ...baseConfigAny.semanticTokens?.colors,
       background: {
         default: '$backgroundLight0',
         _dark: '$backgroundDark0',

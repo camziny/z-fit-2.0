@@ -256,12 +256,7 @@ export const recordExerciseRIR = mutation({
 });
 
 function computeNextPlannedWeight(lastCompletedWeightKg: number, rir: number): number {
-  // Simple default rule; can be replaced with per-category/per-user settings later
-  const bigInc = 5; // kg
-  const smallInc = 2.5; // kg
-  if (rir >= 4) return lastCompletedWeightKg + bigInc;
-  if (rir >= 1) return lastCompletedWeightKg + smallInc;
-  return lastCompletedWeightKg; // rir = 0 maintain
+  return lastCompletedWeightKg;
 }
 
 export const completeSession = mutation({

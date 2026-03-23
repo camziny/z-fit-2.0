@@ -65,22 +65,14 @@ export default function HeaderProgress({
   }, [exercises, totalSets]);
 
   useEffect(() => {
-    if (!exercises[currentExerciseIndex]) return;
-
-    let setsBeforeCurrent = 0;
-    for (let i = 0; i < currentExerciseIndex; i++) {
-      setsBeforeCurrent += exercises[i].sets.length;
-    }
-
-    const currentPosition = setsBeforeCurrent + currentSetIndex;
-    const newProgress = (currentPosition / totalSets) * 100;
+    const newProgress = totalSets > 0 ? (completedSets / totalSets) * 100 : 0;
 
     currentPositionX.value = withSpring(newProgress, {
       damping: 25,
       stiffness: 120,
       mass: 0.8
     });
-  }, [exercises, currentExerciseIndex, currentSetIndex, totalSets, currentPositionX]);
+  }, [completedSets, totalSets, currentPositionX]);
 
   const progressAnimatedStyle = useAnimatedStyle(() => {
     return { 

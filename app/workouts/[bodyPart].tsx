@@ -43,7 +43,7 @@ export default function WorkoutsByBodyPartScreen() {
   useEffect(() => {
     if (!exercises) return;
     try {
-      const urls = (exercises as any[]).map((e: any) => e.gifUrl).filter(Boolean).slice(0, 6) as string[];
+      const urls = (exercises as any[]).map((e: any) => e.mediaGifUrl || e.gifUrl).filter(Boolean).slice(0, 6) as string[];
       urls.forEach(u => { try { ExpoImage.prefetch(u).catch(() => {}); } catch {} });
     } catch {}
   }, [exercises]);

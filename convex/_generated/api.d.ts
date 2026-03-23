@@ -14,6 +14,7 @@ import type {
   FunctionReference,
 } from "convex/server";
 import type * as exercises from "../exercises.js";
+import type * as media from "../media.js";
 import type * as seedData from "../seedData.js";
 import type * as sessions from "../sessions.js";
 import type * as templates from "../templates.js";
@@ -29,6 +30,7 @@ import type * as users from "../users.js";
  */
 declare const fullApi: ApiFromModules<{
   exercises: typeof exercises;
+  media: typeof media;
   seedData: typeof seedData;
   sessions: typeof sessions;
   templates: typeof templates;

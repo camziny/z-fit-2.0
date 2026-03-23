@@ -53,7 +53,7 @@ export default function ProfileScreen() {
 
   let currentStreak = 0;
   if (sortedCompleted.length > 0) {
-    const cursor = new Date(sortedCompleted[0].completedAt);
+    const cursor = new Date(sortedCompleted[0].completedAt ?? 0);
     cursor.setHours(0, 0, 0, 0);
     while (workoutDays.has(cursor.getTime())) {
       currentStreak += 1;

@@ -49,3 +49,6 @@ ios/**/xcuserdata/
 .eas/
 *.ipa
 *.xcarchive
+
+.cache/
+media/generated/

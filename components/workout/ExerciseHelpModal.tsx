@@ -18,13 +18,14 @@ const FALLBACK_GIF = 'https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif
 function ModalContent({ name, exerciseId, gifUrl, onClose }: Omit<Props, 'visible'>) {
   const exercise = useQuery(
     api.exercises.getMultiple,
-    exerciseId ? { exerciseIds: [exerciseId as any] } : 'skip'
+    !gifUrl && exerciseId ? { exerciseIds: [exerciseId as any] } : 'skip'
   );
-  const dbGifUrl = exercise?.[0]?.gifUrl;
+  const dbGifUrl = !gifUrl ? (exercise?.[0]?.mediaGifUrl || exercise?.[0]?.gifUrl) : undefined;
   const sources = useMemo(() => {
     const ordered = [gifUrl, dbGifUrl, FALLBACK_GIF].filter(Boolean) as string[];
     return Array.from(new Set(ordered));
   }, [gifUrl, dbGifUrl]);
+  const sourceKey = useMemo(() => sources.join('|'), [sources]);
   const [sourceIndex, setSourceIndex] = useState(0);
   const resolvedGif = sources[sourceIndex];
   const [loaded, setLoaded] = useState(false);
@@ -32,9 +33,17 @@ function ModalContent({ name, exerciseId, gifUrl, onClose }: Omit<Props, 'visibl
 
   useEffect(() => {
     setSourceIndex(0);
+  }, [sourceKey]);
+
+  useEffect(() => {
+    if (!resolvedGif) {
+      setLoaded(true);
+      setFailed(true);
+      return;
+    }
     setLoaded(false);
     setFailed(false);
-  }, [gifUrl, dbGifUrl]);
+  }, [resolvedGif]);
 
   return (
     <Box position="absolute" top={0} left={0} right={0} bottom={0} bg="rgba(0,0,0,0.95)" justifyContent="center" alignItems="center">
@@ -48,7 +57,12 @@ function ModalContent({ name, exerciseId, gifUrl, onClose }: Omit<Props, 'visibl
           priority="high"
           transition={0}
           recyclingKey={resolvedGif}
+          onLoadStart={() => {
+            setLoaded(false);
+            setFailed(false);
+          }}
           onLoad={() => setLoaded(true)}
+          onLoadEnd={() => setLoaded(true)}
           onError={() => {
             if (sourceIndex < sources.length - 1) {
               setSourceIndex((prev) => prev + 1);

@@ -18,6 +18,8 @@ export interface WorkoutLiveActivityData {
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: false, // Don't show alert, just update the persistent notification
+    shouldShowBanner: false,
+    shouldShowList: false,
     shouldPlaySound: false,
     shouldSetBadge: false,
   }),
@@ -104,7 +106,6 @@ export function useWorkoutLiveActivity() {
           sticky: true, // Android: make notification persistent
           priority: Notifications.AndroidNotificationPriority.HIGH,
           categoryIdentifier: data.restEnabled ? 'workout_with_rest' : 'workout',
-          threadIdentifier: 'workout',
         },
         trigger: null, // Show immediately
       });
@@ -134,7 +135,6 @@ export function useWorkoutLiveActivity() {
           sticky: true,
           priority: Notifications.AndroidNotificationPriority.HIGH,
           categoryIdentifier: data.restEnabled ? 'workout_with_rest' : 'workout',
-          threadIdentifier: 'workout',
         },
         trigger: null,
       });

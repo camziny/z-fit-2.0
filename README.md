@@ -12,3 +12,6 @@ Tech overview
 - Convex
 - Clerk for authentication
 - Gluestack for theming and components
+
+Media workflow
+- Use `MEDIA_PIPELINE.md` for reproducible exercise media generation and syncing.

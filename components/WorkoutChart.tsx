@@ -107,6 +107,8 @@ export default function WorkoutChart({ data, type, title, isDark = false, labels
             width={width - 80}
             height={180}
             chartConfig={chartConfig}
+            yAxisLabel=""
+            yAxisSuffix=""
             style={{
               borderRadius: 8,
             }}

@@ -12,6 +12,8 @@ export interface SetCardProps {
 }
 
 export default function SetCard({ currentExercise, currentSet, currentSetIndex, formatWeight, convertWeight, weightUnit, onWeightAdjust }: SetCardProps) {
+  const hasWeight = currentSet?.weight !== undefined;
+
   return (
     <VStack alignItems="center" space="lg">
       <Box
@@ -62,7 +64,7 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
       </Box>
 
       <VStack alignItems="center" space="xs">
-        {currentSet?.weight ? (
+        {hasWeight ? (
           onWeightAdjust ? (
             <HStack alignItems="center" space="md" justifyContent="center">
               <Pressable onPress={() => onWeightAdjust(-1)}>
@@ -188,7 +190,7 @@ export default function SetCard({ currentExercise, currentSet, currentSetIndex, 
                 : (currentExercise?.loadBasis === 'assisted' ? 'Assistance' : 'No Weight'))}
         </Text>
 
-        {currentSet?.weight && (
+        {hasWeight && (
           <Text
             size="xs"
             color="$textLight300"
