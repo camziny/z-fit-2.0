@@ -52,3 +52,4 @@ ios/**/xcuserdata/
 
 .cache/
 media/generated/
+convex-backups/

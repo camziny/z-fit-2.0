@@ -41,7 +41,7 @@ export default function ExploreScreen() {
               color="$textLight300"
               sx={{ _dark: { color: '$textDark300' } }}
             >
-              Choose a muscle group to start
+              Select a training category to begin
             </Text>
           </VStack>
 

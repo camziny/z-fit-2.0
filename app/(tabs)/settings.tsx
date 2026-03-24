@@ -2,6 +2,7 @@ import { useThemeMode } from '@/hooks/useThemeMode';
 import { useWeightUnit } from '@/hooks/useWeightUnit';
 import { Box, HStack, Pressable, Text, VStack } from '@gluestack-ui/themed';
 import { ScrollView, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const themeOptions = [
   { label: 'System', value: 'system' as const, description: 'Follow device settings' },
@@ -15,6 +16,7 @@ const weightUnitOptions = [
 ];
 
 export default function SettingsScreen() {
+  const insets = useSafeAreaInsets();
   const { themeMode, setThemeMode } = useThemeMode();
   const { weightUnit, setWeightUnit } = useWeightUnit();
 
@@ -24,7 +26,11 @@ export default function SettingsScreen() {
       sx={{ _dark: { bg: '$backgroundDark0' } }} 
       flex={1}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 140 }]}
+        showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="automatic"
+      >
         <VStack space="2xl" p={24}>
           <VStack space="sm" pt={32}>
             <Text 
@@ -40,7 +46,7 @@ export default function SettingsScreen() {
               color="$textLight300"
               sx={{ _dark: { color: '$textDark300' } }}
             >
-              Customize your z-fit experience
+              Adjust your app preferences
             </Text>
           </VStack>
 
@@ -68,7 +74,7 @@ export default function SettingsScreen() {
                     color="$textLight200"
                     sx={{ _dark: { color: '$textDark200' } }}
                   >
-                    Choose your preferred theme
+                    Select your preferred appearance
                   </Text>
                 </VStack>
                 
@@ -172,7 +178,7 @@ export default function SettingsScreen() {
                     color="$textLight200"
                     sx={{ _dark: { color: '$textDark200' } }}
                   >
-                    Choose your preferred weight measurement
+                    Select your default weight unit
                   </Text>
                 </VStack>
                 
@@ -255,71 +261,6 @@ export default function SettingsScreen() {
               </VStack>
             </Box>
 
-            <Box
-              bg="$cardLight"
-              sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
-              borderColor="$borderLight0"
-              borderWidth={1}
-              borderRadius={16}
-              p={24}
-            >
-              <VStack space="lg">
-                <VStack space="sm">
-                  <Text 
-                    size="lg" 
-                    fontWeight="$semibold" 
-                    color="$textLight0"
-                    sx={{ _dark: { color: '$textDark0' } }}
-                  >
-                    About
-                  </Text>
-                  <Text 
-                    size="sm" 
-                    color="$textLight200"
-                    sx={{ _dark: { color: '$textDark200' } }}
-                  >
-                    App information
-                  </Text>
-                </VStack>
-                
-                <VStack space="md">
-                  <HStack justifyContent="space-between" alignItems="center">
-                    <Text 
-                      size="sm" 
-                      color="$textLight200"
-                      sx={{ _dark: { color: '$textDark200' } }}
-                    >
-                      Version
-                    </Text>
-                    <Text 
-                      size="sm" 
-                      color="$textLight0"
-                      sx={{ _dark: { color: '$textDark0' } }}
-                      fontWeight="$medium"
-                    >
-                      1.0.0
-                    </Text>
-                  </HStack>
-                  <HStack justifyContent="space-between" alignItems="center">
-                    <Text 
-                      size="sm" 
-                      color="$textLight200"
-                      sx={{ _dark: { color: '$textDark200' } }}
-                    >
-                      Build
-                    </Text>
-                    <Text 
-                      size="sm" 
-                      color="$textLight0"
-                      sx={{ _dark: { color: '$textDark0' } }}
-                      fontWeight="$medium"
-                    >
-                      Development
-                    </Text>
-                  </HStack>
-                </VStack>
-              </VStack>
-            </Box>
           </VStack>
         </VStack>
       </ScrollView>

@@ -8,7 +8,6 @@ import { useUser } from '@clerk/clerk-expo';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery } from 'convex/react';
-import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, TextInput } from 'react-native';
@@ -74,16 +73,6 @@ export default function WorkoutSetupScreen() {
   const [step, setStep] = useState<'assessment' | 'weights'>('assessment');
   const [plannedWeights, setPlannedWeights] = useState<Record<string, number>>({});
   const [whyOpen, setWhyOpen] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    if (!exercises || !template) return;
-    try {
-      const idsInTemplate = new Set(template.items.map((i: any) => i.exerciseId));
-      const inOrder = (exercises as any[]).filter((e: any) => idsInTemplate.has(e._id));
-      const toPrefetch = inOrder.map((e: any) => e.mediaGifUrl || e.gifUrl).filter(Boolean).slice(0, 4) as string[];
-      toPrefetch.forEach((u) => { try { ExpoImage.prefetch(u).catch(() => {}); } catch {} });
-    } catch {}
-  }, [template, exercises]);
 
   const assessmentQuestions = useMemo<{ exercise: any; type: '1rm' | 'working'; question: string }[]>(() => {
     if (!template || !exercises) return [];
@@ -349,7 +338,7 @@ export default function WorkoutSetupScreen() {
           sx={{ _dark: { color: '$textDark0' } }}
           textAlign="center"
         >
-          Loading workout...
+          Loading workout details...
         </Text>
       </Box>
     );
@@ -370,7 +359,7 @@ export default function WorkoutSetupScreen() {
             sx={{ _dark: { color: '$textDark300' } }}
             textAlign="center"
           >
-            Preparing...
+            Preparing setup...
           </Text>
         </Box>
       );
@@ -392,7 +381,7 @@ export default function WorkoutSetupScreen() {
                 textTransform="uppercase"
                 letterSpacing={1}
               >
-                Quick Calibration
+                Weight Calibration
               </Text>
               <Text 
                 size="3xl" 
@@ -449,7 +438,7 @@ export default function WorkoutSetupScreen() {
                       size="sm"
                       fontWeight="$medium"
                     >
-                      {dontKnow ? 'I know my 1RM' : "I don't know my 1RM"}
+                      {dontKnow ? 'Use 1RM Instead' : 'Use Working Weight Instead'}
                     </Text>
                   </Button>
                 </VStack>
@@ -529,7 +518,7 @@ export default function WorkoutSetupScreen() {
                       textAlign="center"
                       flex={1}
                     >
-                      Plan My Weights
+                      Generate Plan
                     </Text>
                   </Button>
 
@@ -543,7 +532,7 @@ export default function WorkoutSetupScreen() {
                     }}
                   >
                     <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                      Skip and use defaults
+                      Skip for now
                     </Text>
                   </Button>
                 </VStack>
@@ -577,7 +566,7 @@ export default function WorkoutSetupScreen() {
               color="$textLight300"
               sx={{ _dark: { color: '$textDark300' } }}
             >
-              Adjust suggested weights for each exercise
+              Review and adjust suggested weights
             </Text>
           </VStack>
 

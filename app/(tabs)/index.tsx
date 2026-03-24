@@ -78,7 +78,7 @@ export default function HomeScreen() {
                       fontWeight="$medium"
                       size="md"
                     >
-                      Sign In to Track Progress
+                      Sign In to Save Progress
                     </Text>
                   </Button>
                 </VStack>

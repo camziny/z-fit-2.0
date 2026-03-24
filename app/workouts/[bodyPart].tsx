@@ -2,9 +2,8 @@ import { api } from '@/convex/_generated/api';
 
 import { Box, Button, Text, VStack } from '@gluestack-ui/themed';
 import { useQuery } from 'convex/react';
-import { Image as ExpoImage } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
 export default function WorkoutsByBodyPartScreen() {
@@ -39,14 +38,11 @@ export default function WorkoutsByBodyPartScreen() {
     return Array.from(ids);
   }, [templates]);
   const exercises = useQuery(api.exercises.getMultiple, exerciseIds.length ? { exerciseIds: exerciseIds as any } : 'skip');
-  
-  useEffect(() => {
-    if (!exercises) return;
-    try {
-      const urls = (exercises as any[]).map((e: any) => e.mediaGifUrl || e.gifUrl).filter(Boolean).slice(0, 6) as string[];
-      urls.forEach(u => { try { ExpoImage.prefetch(u).catch(() => {}); } catch {} });
-    } catch {}
-  }, [exercises]);
+  const subtitle = useMemo(() => {
+    if (templates === undefined) return 'Loading workout templates...';
+    if (templates.length === 0) return `No ${bodyPart} workouts are available yet`;
+    return 'Choose a template to get started';
+  }, [templates, bodyPart]);
   
   const onStartSetup = (template: any) => {
     router.push(`/workout-setup/${template._id}`);
@@ -95,7 +91,7 @@ export default function WorkoutsByBodyPartScreen() {
               color="$textLight300"
               sx={{ _dark: { color: '$textDark300' } }}
             >
-              Choose a workout template to begin
+              {subtitle}
             </Text>
           </VStack>
 
@@ -220,7 +216,7 @@ export default function WorkoutsByBodyPartScreen() {
                     sx={{ _dark: { color: '$textDark200' } }}
                     textAlign="center"
                   >
-                    No {bodyPart} workouts available yet
+                    No {bodyPart} workouts are available yet
                   </Text>
                   <Text 
                     size="sm" 
@@ -228,7 +224,7 @@ export default function WorkoutsByBodyPartScreen() {
                     sx={{ _dark: { color: '$textDark300' } }}
                     textAlign="center"
                   >
-                    Check back soon for new workout templates
+                    Try another category, or check back soon.
                   </Text>
                 </VStack>
               </Box>

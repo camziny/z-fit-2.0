@@ -2,18 +2,7 @@ import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 
 async function resolveExerciseMedia(ctx: any, exercise: any) {
-  if (!exercise) return exercise;
-  const gifFromStorage = exercise.mediaGifStorageId
-    ? await ctx.storage.getUrl(exercise.mediaGifStorageId)
-    : null;
-  const mp4FromStorage = exercise.mediaMp4StorageId
-    ? await ctx.storage.getUrl(exercise.mediaMp4StorageId)
-    : null;
-  return {
-    ...exercise,
-    mediaGifUrl: gifFromStorage ?? exercise.mediaGifUrl,
-    mediaMp4Url: mp4FromStorage ?? exercise.mediaMp4Url,
-  };
+  return exercise;
 }
 
 export const seedBasics = mutation({
