@@ -8,14 +8,11 @@ import {
   Text,
   VStack,
 } from "@gluestack-ui/themed";
-import * as Linking from "expo-linking";
+import * as AuthSession from "expo-auth-session";
 import { router } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
 import { Alert } from "react-native";
 import Svg, { Path } from "react-native-svg";
-
-WebBrowser.maybeCompleteAuthSession();
 
 function GoogleMark({ size = 18 }: { size?: number }) {
   return (
@@ -49,16 +46,24 @@ export default function SignInScreen() {
   const [loading, setLoading] = useState(false);
   const [otpMode, setOtpMode] = useState<"signIn" | "signUp" | null>(null);
   const [codeRequested, setCodeRequested] = useState(false);
+  const normalizedEmail = emailAddress.trim().toLowerCase();
+  const isCodeReady = emailCode.trim().length > 0;
 
   const onRequestCodePress = async () => {
-    const email = emailAddress.trim().toLowerCase();
-    if (!isLoaded || !isSignUpLoaded || !email) return;
+    if (!normalizedEmail) {
+      Alert.alert("Email required", "Please enter your email address.");
+      return;
+    }
+    if (!isLoaded || !isSignUpLoaded) {
+      Alert.alert("Please wait", "Authentication is still loading. Try again.");
+      return;
+    }
 
     setLoading(true);
     try {
       const signInAttempt = await signIn.create({
         strategy: "email_code",
-        identifier: email,
+        identifier: normalizedEmail,
       });
       if (
         signInAttempt.status === "complete" &&
@@ -88,7 +93,7 @@ export default function SignInScreen() {
         if (!signUp) {
           throw err;
         }
-        await signUp.create({ emailAddress: email });
+        await signUp.create({ emailAddress: normalizedEmail });
         await signUp.prepareEmailAddressVerification({
           strategy: "email_code",
         });
@@ -109,7 +114,18 @@ export default function SignInScreen() {
 
   const onVerifyCodePress = async () => {
     const code = emailCode.trim();
-    if (!isLoaded || !code || !otpMode) return;
+    if (!code) {
+      Alert.alert("Code required", "Enter the verification code from your email.");
+      return;
+    }
+    if (!otpMode) {
+      Alert.alert("Request code first", "Send a verification code before confirming.");
+      return;
+    }
+    if (!isLoaded) {
+      Alert.alert("Please wait", "Authentication is still loading. Try again.");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -154,22 +170,34 @@ export default function SignInScreen() {
   };
 
   const onGoogleSignIn = async () => {
+    if (!isLoaded || loading) return;
+
+    setLoading(true);
     try {
+      const redirectUrl = AuthSession.makeRedirectUri({
+        scheme: "zfit20",
+        path: "sign-in",
+      });
       const { createdSessionId, setActive: setOAuthActive } =
         await startOAuthFlow({
-          redirectUrl: Linking.createURL("/"),
+          redirectUrl,
         });
       if (createdSessionId) {
         await setOAuthActive?.({ session: createdSessionId });
         router.replace("/(tabs)");
       } else {
-        Alert.alert("Sign in canceled", "Google sign in was not completed.");
+        Alert.alert(
+          "Sign in canceled",
+          `Google sign in was not completed. Redirect URL: ${redirectUrl}`,
+        );
       }
     } catch (err: any) {
       Alert.alert(
         "Error",
         err?.errors?.[0]?.message || "Failed to sign in with Google",
       );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -268,7 +296,9 @@ export default function SignInScreen() {
               sx={{ _dark: { bg: "$textDark0" } }}
               onPress={codeRequested ? onVerifyCodePress : onRequestCodePress}
               isDisabled={
-                loading || !emailAddress || (codeRequested && !emailCode)
+                loading ||
+                (!codeRequested && (!normalizedEmail || !isLoaded || !isSignUpLoaded)) ||
+                (codeRequested && !isCodeReady)
               }
               borderRadius={12}
               h={52}
