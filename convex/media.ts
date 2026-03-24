@@ -178,3 +178,34 @@ export const setExerciseMediaSource = mutation({
   },
 });
 
+export const clearStoredExerciseMediaReferences = mutation({
+  args: {
+    clearLegacyUrls: v.optional(v.boolean()),
+  },
+  handler: async (ctx, { clearLegacyUrls }) => {
+    const exercises = await ctx.db.query('exercises').collect();
+    let updated = 0;
+    const affectedExerciseNames: string[] = [];
+    for (const exercise of exercises) {
+      const hasStorageRefs = !!exercise.mediaGifStorageId || !!exercise.mediaMp4StorageId;
+      const hasLegacyMediaUrls =
+        !!exercise.mediaGifUrl || !!exercise.mediaMp4Url || !!exercise.gifUrl;
+      if (!hasStorageRefs && !(clearLegacyUrls && hasLegacyMediaUrls)) continue;
+      await ctx.db.patch(exercise._id, {
+        mediaGifStorageId: undefined,
+        mediaMp4StorageId: undefined,
+        mediaGifUrl: clearLegacyUrls ? undefined : exercise.mediaGifUrl,
+        mediaMp4Url: clearLegacyUrls ? undefined : exercise.mediaMp4Url,
+        gifUrl: clearLegacyUrls ? undefined : exercise.gifUrl,
+      });
+      updated += 1;
+      affectedExerciseNames.push(exercise.name);
+    }
+    return {
+      totalExercises: exercises.length,
+      updated,
+      affectedExerciseNames,
+    };
+  },
+});
+

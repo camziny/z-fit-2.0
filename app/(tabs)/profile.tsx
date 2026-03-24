@@ -4,8 +4,10 @@ import { Avatar, AvatarFallbackText, AvatarImage, Box, Button, HStack, Text, VSt
 import { useQuery } from 'convex/react';
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const { isSignedIn, user } = useUser();
   const { signOut } = useAuth();
   const convexUser = useQuery(
@@ -68,8 +70,12 @@ export default function ProfileScreen() {
       sx={{ _dark: { bg: '$backgroundDark0' } }} 
       flex={1}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <VStack space="2xl" p={24} pb={120}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 140 }]}
+        showsVerticalScrollIndicator={false}
+        contentInsetAdjustmentBehavior="automatic"
+      >
+        <VStack space="2xl" p={24} pb={24}>
           <VStack space="sm" pt={32}>
             <Text 
               size="3xl" 
@@ -85,7 +91,7 @@ export default function ProfileScreen() {
                 color="$textLight300"
                 sx={{ _dark: { color: '$textDark300' } }}
               >
-                Track your fitness journey
+                Review your training progress
               </Text>
             ) : (
               <Text 
@@ -93,7 +99,7 @@ export default function ProfileScreen() {
                 color="$textLight300"
                 sx={{ _dark: { color: '$textDark300' } }}
               >
-                Sign in to track your fitness journey
+                Sign in to save and review your progress
               </Text>
             )}
           </VStack>
@@ -482,7 +488,7 @@ export default function ProfileScreen() {
                     sx={{ _dark: { color: '$textDark0' } }}
                     textAlign="center"
                   >
-                    Sign In to Track Progress
+                    Sign In to View Progress
                   </Text>
                   <Text 
                     size="sm" 
@@ -490,7 +496,7 @@ export default function ProfileScreen() {
                     sx={{ _dark: { color: '$textDark200' } }}
                     textAlign="center"
                   >
-                    Create an account to save your workout history, view detailed stats, and track your fitness journey.
+                    Sign in to save workout history and view your training insights.
                   </Text>
                 </VStack>
                 <Button 
