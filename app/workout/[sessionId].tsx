@@ -1,5 +1,5 @@
 import { api } from "@/convex/_generated/api";
-import { useColorScheme } from "@/hooks/useColorScheme";
+import { useThemeMode } from "@/hooks/useThemeMode";
 import { useWorkoutLiveActivity } from "@/hooks/useLiveActivity";
 import { useWeightUnit } from "@/hooks/useWeightUnit";
 import { getDisplayIncrement } from "@/utils/workoutPlanning";
@@ -31,7 +31,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export default function WorkoutSessionScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: Id<"sessions"> }>();
   const { weightUnit, convertWeight, formatWeight } = useWeightUnit();
-  const colorScheme = useColorScheme();
+  const { effectiveColorScheme } = useThemeMode();
   const session = useQuery(
     api.sessions.getSession,
     sessionId ? { sessionId } : "skip",
@@ -633,24 +633,16 @@ export default function WorkoutSessionScreen() {
               position="relative"
             >
               {!showRoadmap && !isAnyOverlayActive && (
-                <Box position="absolute" top={10} right={10} zIndex={10}>
-                  <Pressable onPress={openExerciseSourceVideo}>
-                    <Box
-                      bg="$backgroundLight200"
-                      sx={{ _dark: { bg: "$backgroundDark200" } }}
-                      borderRadius={14}
-                      w={36}
-                      h={36}
-                      borderWidth={1}
-                      borderColor="$borderLight0"
-                      alignSelf="flex-end"
-                      justifyContent="center"
-                      alignItems="center"
-                    >
-                      <Ionicons name="logo-youtube" size={20} color="#FF0000" />
-                    </Box>
-                  </Pressable>
-                </Box>
+                <Pressable
+                  onPress={openExerciseSourceVideo}
+                  style={{ position: "absolute", top: 12, right: 12, zIndex: 10, padding: 4 }}
+                >
+                  <Ionicons
+                    name="logo-youtube"
+                    size={22}
+                    color={effectiveColorScheme === "dark" ? "#ADB5BD" : "#212529"}
+                  />
+                </Pressable>
               )}
               <VStack space="2xl" alignItems="center" w="100%">
                 <VStack alignItems="center" space="xs">
@@ -698,7 +690,7 @@ export default function WorkoutSessionScreen() {
                                   name="shuffle"
                                   size={16}
                                   color={
-                                    colorScheme === "dark"
+                                    effectiveColorScheme === "dark"
                                       ? "#FFFFFF"
                                       : "#000000"
                                   }

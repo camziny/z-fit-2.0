@@ -9,6 +9,7 @@ import { ConvexProviderWithClerk } from 'convex/react-clerk';
 import { useFonts } from 'expo-font';
 import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as WebBrowser from 'expo-web-browser';
 import { theme } from '../gluestack-theme';
 
 import 'react-native-reanimated';
@@ -17,6 +18,8 @@ import { useThemeMode } from '@/hooks/useThemeMode';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ErrorBoundaryProps } from 'expo-router';
 import { Pressable } from 'react-native';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   const rawMessage = String((error as any)?.message || error || '');
@@ -71,6 +74,27 @@ export default function RootLayout() {
   const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string | undefined;
   const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL as string | undefined;
   const convexClient = new ConvexReactClient(convexUrl ?? '');
+  const renderHeaderBackButton = () => (
+    <Pressable
+      onPress={() => {
+        if (router.canGoBack()) router.back();
+        else router.replace('/(tabs)');
+      }}
+      style={{
+        width: 32,
+        height: 32,
+        justifyContent: 'center',
+        alignItems: 'flex-start',
+      }}
+      hitSlop={8}
+    >
+      <Ionicons
+        name="chevron-back"
+        size={24}
+        color={effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529'}
+      />
+    </Pressable>
+  );
 
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
@@ -117,7 +141,10 @@ export default function RootLayout() {
                   headerShown: true,
                   title: 'Setup',
                   headerBackTitleVisible: false,
+                  headerBackVisible: false,
+                  headerLeft: renderHeaderBackButton,
                   headerBackButtonDisplayMode: 'minimal',
+                  headerLeftContainerStyle: { paddingLeft: 12 },
                   headerStyle: { backgroundColor: effectiveColorScheme === 'dark' ? '#343A40' : '#F8F9FA' },
                   headerTintColor: effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529',
                 }} 
@@ -127,22 +154,11 @@ export default function RootLayout() {
                 options={{ 
                   headerShown: true,
                   title: 'Active Workout',
+                  headerBackTitleVisible: false,
                   headerBackVisible: false,
-                  headerLeft: () => (
-                    <Pressable
-                      onPress={() => {
-                        if (router.canGoBack()) router.back();
-                        else router.replace('/(tabs)');
-                      }}
-                      style={{ paddingHorizontal: 6, paddingVertical: 4 }}
-                    >
-                      <Ionicons
-                        name="arrow-back"
-                        size={22}
-                        color={effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529'}
-                      />
-                    </Pressable>
-                  ),
+                  headerBackButtonDisplayMode: 'minimal',
+                  headerLeft: renderHeaderBackButton,
+                  headerLeftContainerStyle: { paddingLeft: 12 },
                   headerStyle: { backgroundColor: effectiveColorScheme === 'dark' ? '#343A40' : '#F8F9FA' },
                   headerTintColor: effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529',
                 }} 
