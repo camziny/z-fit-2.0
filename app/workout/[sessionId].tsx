@@ -5,10 +5,11 @@ import { useWeightUnit } from "@/hooks/useWeightUnit";
 import { getDisplayIncrement } from "@/utils/workoutPlanning";
 import { Ionicons } from "@expo/vector-icons";
 import { Box, Button, HStack, Text, VStack } from "@gluestack-ui/themed";
+import { usePreventRemove } from "@react-navigation/native";
 import { useMutation, useQuery } from "convex/react";
 import * as Haptics from "expo-haptics";
-import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { router, Stack, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -54,6 +55,7 @@ export default function WorkoutSessionScreen() {
   }, [session]);
   const markSetDone = useMutation(api.sessions.markSetDone);
   const completeSession = useMutation(api.sessions.completeSession);
+  const cancelSession = useMutation(api.sessions.cancelSession);
   const updatePlannedWeight = useMutation(api.sessions.updatePlannedWeight);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [currentSetIndex, setCurrentSetIndex] = useState(0);
@@ -64,9 +66,14 @@ export default function WorkoutSessionScreen() {
   const [showRirCollection, setShowRirCollection] = useState(false);
   const [isSetOverlayActive, setIsSetOverlayActive] = useState(false);
   const [isWorkoutOverlayActive, setIsWorkoutOverlayActive] = useState(false);
+  const [isCancellingWorkout, setIsCancellingWorkout] = useState(false);
+  const [canLeaveWorkout, setCanLeaveWorkout] = useState(false);
   const [overlayExerciseComplete, setOverlayExerciseComplete] = useState(false);
   const [overlayExerciseName, setOverlayExerciseName] = useState<string>("");
   const [liveActivityId, setLiveActivityId] = useState<string | null>(null);
+  const cancelPromptOpenRef = useRef(false);
+  const pendingHomeNavigationRef = useRef(false);
+  const isCancellingWorkoutRef = useRef(false);
 
   const buttonScale = useSharedValue(1);
   const progressWidth = useSharedValue(0);
@@ -90,12 +97,21 @@ export default function WorkoutSessionScreen() {
         () => {},
       );
     }
-    return () => {
-      // no-op here; cleared on completion
-    };
   }, [sessionId]);
   const { startWorkoutActivity, updateWorkoutActivity, endWorkoutActivity } =
     useWorkoutLiveActivity();
+  const isAnyOverlayActive = isSetOverlayActive || isWorkoutOverlayActive;
+
+  const navigateHomeAfterCleanup = useCallback(() => {
+    pendingHomeNavigationRef.current = true;
+    setCanLeaveWorkout(true);
+  }, []);
+
+  useEffect(() => {
+    if (!canLeaveWorkout || !pendingHomeNavigationRef.current) return;
+    pendingHomeNavigationRef.current = false;
+    router.replace("/(tabs)");
+  }, [canLeaveWorkout]);
 
   const handleRirSelect = async (exerciseIndex: number, rir: number) => {
     try {
@@ -135,7 +151,6 @@ export default function WorkoutSessionScreen() {
     celebrationScale.value = withTiming(0.5, { duration: 300 });
     setIsWorkoutOverlayActive(false);
 
-    // End Live Activity
     if (liveActivityId) {
       await endWorkoutActivity(liveActivityId);
       setLiveActivityId(null);
@@ -145,8 +160,69 @@ export default function WorkoutSessionScreen() {
     try {
       await AsyncStorage.removeItem("z-fit-active-session-id");
     } catch {}
-    router.replace("/(tabs)");
+    navigateHomeAfterCleanup();
   };
+
+  const handleCancelWorkout = useCallback(() => {
+    if (isCancellingWorkout || isAnyOverlayActive || cancelPromptOpenRef.current) return;
+    cancelPromptOpenRef.current = true;
+
+    Alert.alert(
+      "Cancel workout?",
+      "This will discard this workout and return you to the home screen.",
+      [
+        {
+          text: "Keep Going",
+          style: "cancel",
+          onPress: () => {
+            cancelPromptOpenRef.current = false;
+          },
+        },
+        {
+          text: "Cancel Workout",
+          style: "destructive",
+          onPress: async () => {
+            isCancellingWorkoutRef.current = true;
+            setIsCancellingWorkout(true);
+            try {
+              if (liveActivityId) {
+                await endWorkoutActivity(liveActivityId);
+                setLiveActivityId(null);
+              }
+              if (sessionId) {
+                await cancelSession({ sessionId: sessionId as Id<"sessions"> });
+              }
+              await AsyncStorage.removeItem("z-fit-active-session-id");
+              navigateHomeAfterCleanup();
+            } catch {
+              isCancellingWorkoutRef.current = false;
+              setIsCancellingWorkout(false);
+              cancelPromptOpenRef.current = false;
+              Alert.alert("Could not cancel workout", "Please try again.");
+            }
+          },
+        },
+      ],
+      {
+        cancelable: true,
+        onDismiss: () => {
+          if (!isCancellingWorkoutRef.current) cancelPromptOpenRef.current = false;
+        },
+      },
+    );
+  }, [
+    cancelSession,
+    endWorkoutActivity,
+    isAnyOverlayActive,
+    isCancellingWorkout,
+    liveActivityId,
+    navigateHomeAfterCleanup,
+    sessionId,
+  ]);
+
+  usePreventRemove(!canLeaveWorkout && Boolean(sessionId), () => {
+    handleCancelWorkout();
+  });
 
   const totalSets = useMemo(() => {
     if (!session) return 0;
@@ -538,7 +614,6 @@ export default function WorkoutSessionScreen() {
     (currentExercise as any)?.mediaSource || (currentExerciseMeta as any)?.mediaSource;
   const currentYoutubeUrl = currentMediaSource?.youtubeUrl as string | undefined;
   const currentYoutubeStartSec = currentMediaSource?.sourceStartSec as number | undefined;
-  const isAnyOverlayActive = isSetOverlayActive || isWorkoutOverlayActive;
   const markDisabled = !!currentSet?.done || isMarkingSet || isAnyOverlayActive;
   const prevDisabled =
     (currentExerciseIndex === 0 && currentSetIndex === 0) ||
@@ -578,9 +653,35 @@ export default function WorkoutSessionScreen() {
     }
   };
 
+  const workoutScreenOptions = useMemo(
+    () => ({
+      gestureEnabled: false,
+      headerLeft: () => (
+        <Pressable
+          onPress={handleCancelWorkout}
+          style={{
+            width: 32,
+            height: 32,
+            justifyContent: "center",
+            alignItems: "flex-start",
+          }}
+          hitSlop={8}
+        >
+          <Ionicons
+            name="chevron-back"
+            size={24}
+            color={effectiveColorScheme === "dark" ? "#F8F9FA" : "#212529"}
+          />
+        </Pressable>
+      ),
+    }),
+    [effectiveColorScheme, handleCancelWorkout],
+  );
+
   if (!session || !currentExercise) {
     return (
       <Box bg="$background" flex={1} p={16} justifyContent="center">
+        <Stack.Screen options={workoutScreenOptions} />
         <Text size="lg" color="$textMuted" textAlign="center">
           Loading workout...
         </Text>
@@ -594,6 +695,7 @@ export default function WorkoutSessionScreen() {
       sx={{ _dark: { bg: "$backgroundDark0" } }}
       flex={1}
     >
+      <Stack.Screen options={workoutScreenOptions} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}

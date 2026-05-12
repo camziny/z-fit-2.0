@@ -1,4 +1,4 @@
-import { useOAuth, useSignIn, useSignUp } from "@clerk/clerk-expo";
+import { useSSO, useSignIn, useSignUp } from "@clerk/clerk-expo";
 import {
   Box,
   Button,
@@ -8,9 +8,10 @@ import {
   Text,
   VStack,
 } from "@gluestack-ui/themed";
-import * as AuthSession from "expo-auth-session";
+import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import Svg, { Path } from "react-native-svg";
 
@@ -40,7 +41,7 @@ function GoogleMark({ size = 18 }: { size?: number }) {
 export default function SignInScreen() {
   const { signIn, setActive, isLoaded } = useSignIn();
   const { signUp, isLoaded: isSignUpLoaded } = useSignUp();
-  const { startOAuthFlow } = useOAuth({ strategy: "oauth_google" });
+  const { startSSOFlow } = useSSO();
   const [emailAddress, setEmailAddress] = useState("");
   const [emailCode, setEmailCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -49,6 +50,13 @@ export default function SignInScreen() {
   const normalizedEmail = emailAddress.trim().toLowerCase();
   const isCodeReady = emailCode.trim().length > 0;
   const hasClerkKey = Boolean(process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+  useEffect(() => {
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
 
   const showAuthUnavailableAlert = () => {
     Alert.alert(
@@ -188,12 +196,10 @@ export default function SignInScreen() {
 
     setLoading(true);
     try {
-      const redirectUrl = AuthSession.makeRedirectUri({
-        scheme: "zfit20",
-        path: "sign-in",
-      });
+      const redirectUrl = Linking.createURL("sign-in");
       const { createdSessionId, setActive: setOAuthActive } =
-        await startOAuthFlow({
+        await startSSOFlow({
+          strategy: "oauth_google",
           redirectUrl,
         });
       if (createdSessionId) {
@@ -202,7 +208,7 @@ export default function SignInScreen() {
       } else {
         Alert.alert(
           "Sign in canceled",
-          `Google sign in was not completed. Redirect URL: ${redirectUrl}`,
+          "Google sign in was not completed.",
         );
       }
     } catch (err: any) {

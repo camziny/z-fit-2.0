@@ -6,6 +6,18 @@ export type ExerciseWeightMeta = {
   roundingIncrementKg?: number;
 };
 
+export type PlannedWeightValue = number | number[];
+
+export const DEFAULT_WORKING_REPS = 10;
+
+export function estimateOneRepMax(weight: number, reps: number): number {
+  return weight * (1 + reps / 30);
+}
+
+export function estimateWeightForReps(oneRepMax: number, reps: number): number {
+  return oneRepMax / (1 + reps / 30);
+}
+
 export function getDisplayIncrement(weightUnit: WeightUnit, exerciseMeta?: ExerciseWeightMeta): number {
   const isPair = exerciseMeta?.loadingMode === 'pair';
   if (weightUnit === 'kg') return isPair ? 5 : 2.5;
@@ -22,18 +34,23 @@ export function roundGymDisplayWeight(
 }
 
 export function buildPlannedWeightsInKg(
-  plannedWeights: Record<string, number>,
+  plannedWeights: Record<string, PlannedWeightValue>,
   weightUnit: WeightUnit,
   exercises: ExerciseWeightMeta[],
   convertWeight: (value: number, fromUnit: WeightUnit, toUnit: WeightUnit) => number
-): Record<string, number> {
+): Record<string, PlannedWeightValue> {
   const byId = new Map(exercises.map((exercise) => [exercise._id, exercise]));
-  const result: Record<string, number> = {};
+  const result: Record<string, PlannedWeightValue> = {};
 
   Object.entries(plannedWeights).forEach(([exerciseId, weight]) => {
     const exerciseMeta = byId.get(exerciseId);
-    const roundedDisplayWeight = roundGymDisplayWeight(weight, weightUnit, exerciseMeta);
-    result[exerciseId] = convertWeight(roundedDisplayWeight, weightUnit, 'kg');
+    const convertRounded = (value: number) => {
+      const roundedDisplayWeight = roundGymDisplayWeight(value, weightUnit, exerciseMeta);
+      return convertWeight(roundedDisplayWeight, weightUnit, 'kg');
+    };
+    result[exerciseId] = Array.isArray(weight)
+      ? weight.map(convertRounded)
+      : convertRounded(weight);
   });
 
   return result;

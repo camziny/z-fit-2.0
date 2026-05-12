@@ -90,11 +90,9 @@ export default function HeaderProgress({
   return (
     <VStack space="lg" pt={16}>
       <HStack justifyContent="space-between" alignItems="center">
-        <VStack space="xs">
-          <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-            {completedSets} of {totalSets} sets completed
-          </Text>
-        </VStack>
+        <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
+          {completedSets} of {totalSets} sets completed
+        </Text>
         <HStack space="xs">
           <TouchableOpacity onPress={() => onToggleRest(!restEnabled)}>
             <Box

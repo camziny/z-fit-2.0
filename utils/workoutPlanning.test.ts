@@ -1,7 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildPlannedWeightsInKg, getDisplayIncrement, roundGymDisplayWeight } from './workoutPlanning';
+import {
+  buildPlannedWeightsInKg,
+  estimateOneRepMax,
+  estimateWeightForReps,
+  getDisplayIncrement,
+  roundGymDisplayWeight,
+} from './workoutPlanning';
 import { convertWeight } from './weights';
+
+describe('Epley load estimates', () => {
+  it('estimates 1RM from a working set', () => {
+    expect(estimateOneRepMax(225, 10)).toBe(300);
+  });
+
+  it('estimates target weight from 1RM and target reps', () => {
+    expect(estimateWeightForReps(300, 10)).toBe(225);
+    expect(Math.round(estimateWeightForReps(300, 5))).toBe(257);
+  });
+});
 
 describe('getDisplayIncrement', () => {
   it('uses 5 lb / 2.5 kg for single loading', () => {
@@ -42,6 +59,23 @@ describe('buildPlannedWeightsInKg', () => {
 
     expect(result.exPair).toBe(convertWeight(70, 'lbs', 'kg'));
     expect(result.exSingle).toBe(convertWeight(135, 'lbs', 'kg'));
+  });
+
+  it('preserves per-set planned weights when converting to kg', () => {
+    const plannedWeights = {
+      exBar: [168, 182, 193],
+    };
+    const exercises = [
+      { _id: 'exBar', loadingMode: 'bar' as const },
+    ];
+
+    const result = buildPlannedWeightsInKg(plannedWeights, 'lbs', exercises, convertWeight);
+
+    expect(result.exBar).toEqual([
+      convertWeight(170, 'lbs', 'kg'),
+      convertWeight(180, 'lbs', 'kg'),
+      convertWeight(195, 'lbs', 'kg'),
+    ]);
   });
 });
 
