@@ -48,6 +48,16 @@ export default function SignInScreen() {
   const [codeRequested, setCodeRequested] = useState(false);
   const normalizedEmail = emailAddress.trim().toLowerCase();
   const isCodeReady = emailCode.trim().length > 0;
+  const hasClerkKey = Boolean(process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+  const showAuthUnavailableAlert = () => {
+    Alert.alert(
+      "Sign in unavailable",
+      hasClerkKey
+        ? "Authentication is still loading. Force quit the app and try again."
+        : "This build is missing the Clerk publishable key. Add it to EAS environment variables and rebuild.",
+    );
+  };
 
   const onRequestCodePress = async () => {
     if (!normalizedEmail) {
@@ -55,7 +65,7 @@ export default function SignInScreen() {
       return;
     }
     if (!isLoaded || !isSignUpLoaded) {
-      Alert.alert("Please wait", "Authentication is still loading. Try again.");
+      showAuthUnavailableAlert();
       return;
     }
 
@@ -123,7 +133,7 @@ export default function SignInScreen() {
       return;
     }
     if (!isLoaded) {
-      Alert.alert("Please wait", "Authentication is still loading. Try again.");
+      showAuthUnavailableAlert();
       return;
     }
 
@@ -170,7 +180,11 @@ export default function SignInScreen() {
   };
 
   const onGoogleSignIn = async () => {
-    if (!isLoaded || loading) return;
+    if (loading) return;
+    if (!isLoaded) {
+      showAuthUnavailableAlert();
+      return;
+    }
 
     setLoading(true);
     try {
@@ -297,7 +311,7 @@ export default function SignInScreen() {
               onPress={codeRequested ? onVerifyCodePress : onRequestCodePress}
               isDisabled={
                 loading ||
-                (!codeRequested && (!normalizedEmail || !isLoaded || !isSignUpLoaded)) ||
+                (!codeRequested && !normalizedEmail) ||
                 (codeRequested && !isCodeReady)
               }
               borderRadius={12}
