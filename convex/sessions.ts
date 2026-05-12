@@ -106,7 +106,7 @@ export const startFromTemplate = mutation({
     templateId: v.id('templates'), 
     userId: v.optional(v.id('users')), 
     anonKey: v.optional(v.string()),
-    plannedWeights: v.optional(v.record(v.string(), v.number()))
+    plannedWeights: v.optional(v.record(v.string(), v.union(v.number(), v.array(v.number()))))
   },
   handler: async (ctx, { templateId, userId, anonKey, plannedWeights = {} }) => {
     const resolvedUserId = await resolveUserId(ctx, userId as any);
@@ -119,7 +119,7 @@ export const startFromTemplate = mutation({
         .map(async (item: any) => {
           const ex = (await ctx.db.get(item.exerciseId)) as any;
           // Merge provided plannedWeights with progression profile next weights
-          let plannedWeight = plannedWeights[item.exerciseId] as number | undefined;
+          let plannedWeight = plannedWeights[item.exerciseId] as number | number[] | undefined;
           if (plannedWeight === undefined && resolvedUserId) {
             const prof = await ctx.db
               .query('progressionProfiles')
@@ -138,9 +138,9 @@ export const startFromTemplate = mutation({
             groupOrder: item.groupOrder,
             restSec: item.sets[0]?.restSec,
             rir: undefined,
-            sets: item.sets.map((s: any) => ({ 
+            sets: item.sets.map((s: any, setIndex: number) => ({ 
               reps: s.reps, 
-              weight: plannedWeight ?? s.weight, 
+              weight: Array.isArray(plannedWeight) ? plannedWeight[setIndex] ?? s.weight : plannedWeight ?? s.weight, 
               done: false 
             })),
           };
@@ -267,6 +267,17 @@ export const completeSession = mutation({
     s.status = 'completed';
     s.completedAt = Date.now();
     await ctx.db.replace(sessionId, s);
+    return true;
+  },
+});
+
+export const cancelSession = mutation({
+  args: { sessionId: v.id('sessions') },
+  handler: async (ctx, { sessionId }) => {
+    const s = await ctx.db.get(sessionId);
+    if (!s) return true;
+    if (s.status !== 'active') return true;
+    await ctx.db.delete(sessionId);
     return true;
   },
 });

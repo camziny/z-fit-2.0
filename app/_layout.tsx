@@ -157,8 +157,7 @@ export default function RootLayout() {
                   headerBackTitleVisible: false,
                   headerBackVisible: false,
                   headerBackButtonDisplayMode: 'minimal',
-                  headerLeft: renderHeaderBackButton,
-                  headerLeftContainerStyle: { paddingLeft: 12 },
+                  gestureEnabled: false,
                   headerStyle: { backgroundColor: effectiveColorScheme === 'dark' ? '#343A40' : '#F8F9FA' },
                   headerTintColor: effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529',
                 }} 
