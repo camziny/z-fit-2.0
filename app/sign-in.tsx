@@ -49,7 +49,10 @@ export default function SignInScreen() {
   const [codeRequested, setCodeRequested] = useState(false);
   const normalizedEmail = emailAddress.trim().toLowerCase();
   const isCodeReady = emailCode.trim().length > 0;
-  const hasClerkKey = Boolean(process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  const clerkPublishableKey =
+    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+  const hasClerkKey = Boolean(clerkPublishableKey?.startsWith("pk_"));
+  const isEmailAuthLoaded = isLoaded && isSignUpLoaded;
 
   useEffect(() => {
     void WebBrowser.warmUpAsync();
@@ -67,12 +70,33 @@ export default function SignInScreen() {
     );
   };
 
+  const showGoogleIncompleteAlert = (details: {
+    resultType?: string;
+    signInStatus?: string | null;
+    signUpStatus?: string | null;
+  }) => {
+    const statusDetails = [
+      details.resultType ? `OAuth result: ${details.resultType}` : null,
+      details.signInStatus ? `Sign in status: ${details.signInStatus}` : null,
+      details.signUpStatus ? `Sign up status: ${details.signUpStatus}` : null,
+    ].filter(Boolean);
+
+    Alert.alert(
+      "Google sign in incomplete",
+      [
+        "Google returned to the app, but Clerk did not create a session.",
+        ...statusDetails,
+        "Check the live Clerk OAuth settings and allowed redirect URL.",
+      ].join("\n"),
+    );
+  };
+
   const onRequestCodePress = async () => {
     if (!normalizedEmail) {
       Alert.alert("Email required", "Please enter your email address.");
       return;
     }
-    if (!isLoaded || !isSignUpLoaded) {
+    if (!isEmailAuthLoaded) {
       showAuthUnavailableAlert();
       return;
     }
@@ -189,7 +213,7 @@ export default function SignInScreen() {
 
   const onGoogleSignIn = async () => {
     if (loading) return;
-    if (!isLoaded) {
+    if (!hasClerkKey || !isEmailAuthLoaded) {
       showAuthUnavailableAlert();
       return;
     }
@@ -197,24 +221,41 @@ export default function SignInScreen() {
     setLoading(true);
     try {
       const redirectUrl = Linking.createURL("sign-in");
-      const { createdSessionId, setActive: setOAuthActive } =
-        await startSSOFlow({
-          strategy: "oauth_google",
-          redirectUrl,
-        });
+      const {
+        authSessionResult,
+        createdSessionId,
+        setActive: setOAuthActive,
+        signIn: oauthSignIn,
+        signUp: oauthSignUp,
+      } = await startSSOFlow({
+        strategy: "oauth_google",
+        redirectUrl,
+      });
       if (createdSessionId) {
         await setOAuthActive?.({ session: createdSessionId });
         router.replace("/(tabs)");
       } else {
-        Alert.alert(
-          "Sign in canceled",
-          "Google sign in was not completed.",
-        );
+        if (!authSessionResult) {
+          showAuthUnavailableAlert();
+        } else if (authSessionResult.type === "cancel") {
+          Alert.alert("Sign in canceled", "Google sign in was canceled.");
+        } else if (authSessionResult.type === "dismiss") {
+          Alert.alert("Sign in dismissed", "Google sign in was dismissed before it completed.");
+        } else {
+          showGoogleIncompleteAlert({
+            resultType: authSessionResult.type,
+            signInStatus: oauthSignIn?.status,
+            signUpStatus: oauthSignUp?.status,
+          });
+        }
       }
     } catch (err: any) {
       Alert.alert(
         "Error",
-        err?.errors?.[0]?.message || "Failed to sign in with Google",
+        err?.errors?.[0]?.longMessage ||
+          err?.errors?.[0]?.message ||
+          err?.message ||
+          "Failed to sign in with Google",
       );
     } finally {
       setLoading(false);

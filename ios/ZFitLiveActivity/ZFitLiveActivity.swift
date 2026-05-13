@@ -10,6 +10,7 @@ struct WorkoutAttributes: ActivityAttributes {
         var weight: String?
         var restEnabled: Bool
         var restTimeRemaining: Int
+        var restEndsAt: Double?
         var isSuperset: Bool
         var supersetInfo: String?
     }
@@ -40,7 +41,7 @@ struct ZFitLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     if context.state.restEnabled && context.state.restTimeRemaining > 0 {
-                        RestBadge(seconds: context.state.restTimeRemaining)
+                        RestBadge(seconds: context.state.restTimeRemaining, endsAt: context.state.restEndsAt)
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) { EmptyView() }
@@ -48,7 +49,8 @@ struct ZFitLiveActivity: Widget {
                 ProgressCircle(current: context.state.currentSet, total: context.state.totalSets)
             } compactTrailing: {
                 if context.state.restEnabled && context.state.restTimeRemaining > 0 {
-                    Text("\(context.state.restTimeRemaining)s").font(.caption2)
+                    RestCountdown(seconds: context.state.restTimeRemaining, endsAt: context.state.restEndsAt)
+                        .font(.caption2)
                 }
             } minimal: {
                 ProgressCircle(current: context.state.currentSet, total: context.state.totalSets)
@@ -72,7 +74,7 @@ private struct LiveActivityView: View {
                 }.font(.subheadline).lineLimit(1)
                 ProgressView(value: Double(context.state.currentSet), total: Double(max(context.state.totalSets, 1)))
                 if context.state.restEnabled && context.state.restTimeRemaining > 0 {
-                    RestBadge(seconds: context.state.restTimeRemaining).padding(.top, 2)
+                    RestBadge(seconds: context.state.restTimeRemaining, endsAt: context.state.restEndsAt).padding(.top, 2)
                 }
             }.padding(12)
         }
@@ -96,12 +98,30 @@ private struct ProgressCircle: View {
 
 private struct RestBadge: View {
     let seconds: Int
+    let endsAt: Double?
     var body: some View {
-        Text("Rest \(seconds)s")
+        HStack(spacing: 3) {
+            Text("Rest")
+            RestCountdown(seconds: seconds, endsAt: endsAt)
+        }
             .font(.caption2)
             .padding(.vertical, 4)
             .padding(.horizontal, 8)
             .background(Color.accentColor.opacity(0.15))
             .clipShape(Capsule())
+    }
+}
+
+private struct RestCountdown: View {
+    let seconds: Int
+    let endsAt: Double?
+    var body: some View {
+        if let endsAt, endsAt > 0 {
+            let now = Date()
+            let endDate = Date(timeIntervalSince1970: endsAt / 1000)
+            Text(timerInterval: now...max(now, endDate), countsDown: true)
+        } else {
+            Text("\(seconds)s")
+        }
     }
 }

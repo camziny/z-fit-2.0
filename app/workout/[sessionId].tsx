@@ -10,7 +10,7 @@ import { useMutation, useQuery } from "convex/react";
 import * as Haptics from "expo-haptics";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Linking, Pressable, ScrollView, StyleSheet } from "react-native";
+import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, type AppStateStatus } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -61,8 +61,11 @@ export default function WorkoutSessionScreen() {
   const [currentSetIndex, setCurrentSetIndex] = useState(0);
   const [restEnabled, setRestEnabled] = useState(false);
   const [restRemainingSec, setRestRemainingSec] = useState<number | null>(null);
+  const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
+  const [appStateStatus, setAppStateStatus] = useState<AppStateStatus>(AppState.currentState);
   const [showRoadmap, setShowRoadmap] = useState(false);
   const [isMarkingSet, setIsMarkingSet] = useState(false);
+  const [optimisticCompletedSetKeys, setOptimisticCompletedSetKeys] = useState<Set<string>>(() => new Set());
   const [showRirCollection, setShowRirCollection] = useState(false);
   const [isSetOverlayActive, setIsSetOverlayActive] = useState(false);
   const [isWorkoutOverlayActive, setIsWorkoutOverlayActive] = useState(false);
@@ -91,6 +94,8 @@ export default function WorkoutSessionScreen() {
 
   const recordRir = useMutation(api.sessions.recordExerciseRIR);
 
+  const getSetKey = useCallback((exerciseIndex: number, setIndex: number) => `${exerciseIndex}:${setIndex}`, []);
+
   useEffect(() => {
     if (sessionId) {
       AsyncStorage.setItem("z-fit-active-session-id", String(sessionId)).catch(
@@ -101,6 +106,25 @@ export default function WorkoutSessionScreen() {
   const { startWorkoutActivity, updateWorkoutActivity, endWorkoutActivity } =
     useWorkoutLiveActivity();
   const isAnyOverlayActive = isSetOverlayActive || isWorkoutOverlayActive;
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", setAppStateStatus);
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    setOptimisticCompletedSetKeys((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set(prev);
+      session.exercises.forEach((exercise: any, exerciseIndex: number) => {
+        exercise.sets.forEach((set: any, setIndex: number) => {
+          if (set.done) next.delete(getSetKey(exerciseIndex, setIndex));
+        });
+      });
+      return next.size === prev.size ? prev : next;
+    });
+  }, [getSetKey, session]);
 
   const navigateHomeAfterCleanup = useCallback(() => {
     pendingHomeNavigationRef.current = true;
@@ -151,16 +175,25 @@ export default function WorkoutSessionScreen() {
     celebrationScale.value = withTiming(0.5, { duration: 300 });
     setIsWorkoutOverlayActive(false);
 
-    if (liveActivityId) {
-      await endWorkoutActivity(liveActivityId);
-      setLiveActivityId(null);
-    }
-
-    await completeSession({ sessionId: sessionId as Id<"sessions"> });
     try {
-      await AsyncStorage.removeItem("z-fit-active-session-id");
-    } catch {}
-    navigateHomeAfterCleanup();
+      await completeSession({ sessionId: sessionId as Id<"sessions"> });
+
+      if (liveActivityId) {
+        await endWorkoutActivity(liveActivityId);
+        setLiveActivityId(null);
+      }
+
+      try {
+        await AsyncStorage.removeItem("z-fit-active-session-id");
+      } catch {}
+      navigateHomeAfterCleanup();
+    } catch {
+      setIsWorkoutOverlayActive(true);
+      workoutCompleteOpacity.value = withTiming(1, { duration: 250 });
+      celebrationOpacity.value = withTiming(1, { duration: 250 });
+      celebrationScale.value = withSpring(1, { damping: 12, stiffness: 200 });
+      Alert.alert("Could not finish workout", "Please wait for your final set to sync, then try again.");
+    }
   };
 
   const handleCancelWorkout = useCallback(() => {
@@ -234,14 +267,27 @@ export default function WorkoutSessionScreen() {
 
   const completedSets = useMemo(() => {
     if (!session) return 0;
-    return session.exercises.reduce(
+    const savedCompleted = session.exercises.reduce(
       (acc: number, ex: any) => acc + ex.sets.filter((s: any) => s.done).length,
       0,
     );
-  }, [session]);
+    let optimisticCompleted = 0;
+    optimisticCompletedSetKeys.forEach((key) => {
+      const [exerciseIndexRaw, setIndexRaw] = key.split(":");
+      const exerciseIndex = Number(exerciseIndexRaw);
+      const setIndex = Number(setIndexRaw);
+      const set = session.exercises[exerciseIndex]?.sets[setIndex];
+      if (set && !set.done) optimisticCompleted += 1;
+    });
+    return savedCompleted + optimisticCompleted;
+  }, [optimisticCompletedSetKeys, session]);
 
   const overallPercent =
     totalSets === 0 ? 0 : Math.round((completedSets / totalSets) * 100);
+  const liveActivityRestRemaining = useMemo(
+    () => (restEndsAt ? Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000)) : undefined),
+    [restEndsAt],
+  );
 
   const onMarkCurrent = async () => {
     if (!session || isMarkingSet) return;
@@ -255,8 +301,33 @@ export default function WorkoutSessionScreen() {
     const exercise = session.exercises[currentExerciseIndex];
     const nextSetIndex = currentSetIndex + 1;
     const isCompletingExercise = nextSetIndex >= exercise.sets.length;
+    const completedSetKey = getSetKey(currentExerciseIndex, currentSetIndex);
+    const optimisticSession = {
+      ...session,
+      exercises: session.exercises.map((sessionExercise: any, exerciseIndex: number) => {
+        if (exerciseIndex !== currentExerciseIndex) return sessionExercise;
+        return {
+          ...sessionExercise,
+          sets: sessionExercise.sets.map((set: any, setIndex: number) =>
+            setIndex === currentSetIndex
+              ? {
+                  ...set,
+                  done: true,
+                  completedAt: Date.now(),
+                  completedWeight: currentSet?.weight,
+                }
+              : set
+          ),
+        };
+      }),
+    };
 
     setIsSetOverlayActive(true);
+    setOptimisticCompletedSetKeys((prev) => {
+      const next = new Set(prev);
+      next.add(completedSetKey);
+      return next;
+    });
     setOverlayExerciseComplete(isCompletingExercise);
     setOverlayExerciseName(
       exercise.exerciseName || `Exercise ${currentExerciseIndex + 1}`,
@@ -269,132 +340,141 @@ export default function WorkoutSessionScreen() {
     const newProgress = Math.round(((completedSets + 1) / totalSets) * 100);
     progressWidth.value = withTiming(newProgress, { duration: 600 });
 
-    try {
-      await markSetDone({
-        sessionId: sessionId as Id<"sessions">,
-        exerciseIndex: currentExerciseIndex,
-        setIndex: currentSetIndex,
-        weight: currentSet?.weight,
+    const markSetDonePromise = markSetDone({
+      sessionId: sessionId as Id<"sessions">,
+      exerciseIndex: currentExerciseIndex,
+      setIndex: currentSetIndex,
+      weight: currentSet?.weight,
+    })
+      .then(() => true)
+      .catch(() => {
+        setOptimisticCompletedSetKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(completedSetKey);
+          return next;
+        });
+        Alert.alert("Could not save set", "Your progress did not sync. Please try marking this set again.");
+        return false;
       });
 
-      setTimeout(() => {
-        cardSuccessOpacity.value = withTiming(0, { duration: 100 });
-        successCheckOpacity.value = withTiming(0, { duration: 100 });
-        successCheckScale.value = withTiming(0.3, { duration: 100 });
-        setIsSetOverlayActive(false);
-        setOverlayExerciseComplete(false);
-        setOverlayExerciseName("");
+    setTimeout(async () => {
+      cardSuccessOpacity.value = withTiming(0, { duration: 100 });
+      successCheckOpacity.value = withTiming(0, { duration: 100 });
+      successCheckScale.value = withTiming(0.3, { duration: 100 });
+      setIsSetOverlayActive(false);
+      setOverlayExerciseComplete(false);
+      setOverlayExerciseName("");
 
-        const latestSession = sessionRef.current;
-        if (!latestSession) {
-          setIsMarkingSet(false);
-          return;
-        }
+      const wasSaved = await markSetDonePromise;
+      if (!wasSaved) {
+        progressWidth.value = withTiming(overallPercent, { duration: 300 });
+        setIsMarkingSet(false);
+        return;
+      }
 
-        const exercise = latestSession.exercises[currentExerciseIndex];
-        const nextSetIndex = currentSetIndex + 1;
-        const nextExerciseIndex = currentExerciseIndex + 1;
-        const latestCompleted = latestSession.exercises.reduce(
-          (acc: number, ex: any) =>
-            acc + ex.sets.filter((s: any) => s.done).length,
-          0,
-        );
-        const latestTotal = latestSession.exercises.reduce(
-          (acc: number, ex: any) => acc + ex.sets.length,
-          0,
-        );
-        const isWorkoutComplete = latestCompleted >= latestTotal;
+      const latestSession = optimisticSession;
 
-        if (isWorkoutComplete) {
-          setTimeout(() => {
-            setIsWorkoutOverlayActive(true);
-            workoutCompleteScale.value = withSpring(1.05, {
-              damping: 12,
-              stiffness: 200,
-            });
-            workoutCompleteOpacity.value = withTiming(1, { duration: 400 });
-            celebrationOpacity.value = withTiming(1, { duration: 500 });
-            celebrationScale.value = withSpring(1, {
-              damping: 10,
-              stiffness: 300,
-            });
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      const exercise = latestSession.exercises[currentExerciseIndex];
+      const nextSetIndex = currentSetIndex + 1;
+      const nextExerciseIndex = currentExerciseIndex + 1;
+      const latestCompleted = latestSession.exercises.reduce(
+        (acc: number, ex: any) =>
+          acc + ex.sets.filter((s: any) => s.done).length,
+        0,
+      );
+      const latestTotal = latestSession.exercises.reduce(
+        (acc: number, ex: any) => acc + ex.sets.length,
+        0,
+      );
+      const isWorkoutComplete = latestCompleted >= latestTotal;
 
-            const freshSession = sessionRef.current;
-            const missing = (freshSession ?? latestSession).exercises
-              .filter((ex: any) =>
-                ex.sets.some((st: any) => st.weight !== undefined),
-              )
-              .filter((ex: any) => ex.rir === undefined);
+      if (isWorkoutComplete) {
+        setTimeout(() => {
+          setIsWorkoutOverlayActive(true);
+          workoutCompleteScale.value = withSpring(1.05, {
+            damping: 12,
+            stiffness: 200,
+          });
+          workoutCompleteOpacity.value = withTiming(1, { duration: 400 });
+          celebrationOpacity.value = withTiming(1, { duration: 500 });
+          celebrationScale.value = withSpring(1, {
+            damping: 10,
+            stiffness: 300,
+          });
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
-            setShowRirCollection(missing.length > 0);
-          }, 200);
-        }
+          const freshSession = sessionRef.current;
+          const missing = (freshSession ?? latestSession).exercises
+            .filter((ex: any) =>
+              ex.sets.some((st: any) => st.weight !== undefined),
+            )
+            .filter((ex: any) => ex.rir === undefined);
 
-        if (restEnabled && exercise?.restSec) {
-          setRestRemainingSec(exercise.restSec);
-        }
+          setShowRirCollection(missing.length > 0);
+        }, 200);
+      }
 
-        const groupId = exercise.groupId;
-        if (groupId) {
-          const groupMembers = latestSession.exercises
-            .map((ex: any, idx: number) => ({ ex, idx }))
-            .filter(({ ex }: { ex: any; idx: number }) => ex.groupId === groupId)
-            .sort(
-              (a: any, b: any) =>
-                (a.ex.groupOrder || 0) - (b.ex.groupOrder || 0) ||
-                a.idx - b.idx,
-            );
-          const currentPos = groupMembers.findIndex(
-            (m: any) => m.idx === currentExerciseIndex,
+      if (restEnabled && exercise?.restSec) {
+        setRestEndsAt(Date.now() + exercise.restSec * 1000);
+        setRestRemainingSec(exercise.restSec);
+      }
+
+      const groupId = exercise.groupId;
+      if (groupId) {
+        const groupMembers = latestSession.exercises
+          .map((ex: any, idx: number) => ({ ex, idx }))
+          .filter(({ ex }: { ex: any; idx: number }) => ex.groupId === groupId)
+          .sort(
+            (a: any, b: any) =>
+              (a.ex.groupOrder || 0) - (b.ex.groupOrder || 0) ||
+              a.idx - b.idx,
           );
-          let advanced = false;
-          for (let stepIdx = 1; stepIdx < groupMembers.length; stepIdx++) {
-            const nextPos = (currentPos + stepIdx) % groupMembers.length;
-            const candidate = groupMembers[nextPos];
-            const cUndone = candidate.ex.sets.findIndex((st: any) => !st.done);
-            if (cUndone !== -1) {
-              setCurrentExerciseIndex(candidate.idx);
-              setCurrentSetIndex(cUndone);
-              advanced = true;
-              break;
-            }
+        const currentPos = groupMembers.findIndex(
+          (m: any) => m.idx === currentExerciseIndex,
+        );
+        let advanced = false;
+        for (let stepIdx = 1; stepIdx < groupMembers.length; stepIdx++) {
+          const nextPos = (currentPos + stepIdx) % groupMembers.length;
+          const candidate = groupMembers[nextPos];
+          const cUndone = candidate.ex.sets.findIndex((st: any) => !st.done);
+          if (cUndone !== -1) {
+            setCurrentExerciseIndex(candidate.idx);
+            setCurrentSetIndex(cUndone);
+            advanced = true;
+            break;
           }
-          if (!advanced) {
-            if (nextSetIndex < exercise.sets.length) {
-              setCurrentSetIndex(nextSetIndex);
-            } else if (nextExerciseIndex < latestSession.exercises.length) {
-              let idx = nextExerciseIndex;
-              while (idx < latestSession.exercises.length) {
-                const nEx = latestSession.exercises[idx];
-                const nUndone = nEx.sets.findIndex((st: any) => !st.done);
-                if (nUndone !== -1) {
-                  setCurrentExerciseIndex(idx);
-                  setCurrentSetIndex(nUndone);
-                  break;
-                }
-                idx += 1;
-              }
-            }
-          }
-        } else {
+        }
+        if (!advanced) {
           if (nextSetIndex < exercise.sets.length) {
             setCurrentSetIndex(nextSetIndex);
           } else if (nextExerciseIndex < latestSession.exercises.length) {
-            const nextEx = latestSession.exercises[nextExerciseIndex];
-            const nUndone = nextEx.sets.findIndex((st: any) => !st.done);
-            setCurrentExerciseIndex(nextExerciseIndex);
-            setCurrentSetIndex(nUndone === -1 ? 0 : nUndone);
+            let idx = nextExerciseIndex;
+            while (idx < latestSession.exercises.length) {
+              const nEx = latestSession.exercises[idx];
+              const nUndone = nEx.sets.findIndex((st: any) => !st.done);
+              if (nUndone !== -1) {
+                setCurrentExerciseIndex(idx);
+                setCurrentSetIndex(nUndone);
+                break;
+              }
+              idx += 1;
+            }
           }
         }
+      } else {
+        if (nextSetIndex < exercise.sets.length) {
+          setCurrentSetIndex(nextSetIndex);
+        } else if (nextExerciseIndex < latestSession.exercises.length) {
+          const nextEx = latestSession.exercises[nextExerciseIndex];
+          const nUndone = nextEx.sets.findIndex((st: any) => !st.done);
+          setCurrentExerciseIndex(nextExerciseIndex);
+          setCurrentSetIndex(nUndone === -1 ? 0 : nUndone);
+        }
+      }
 
-        setIsMarkingSet(false);
-      }, 800);
-    } catch {
       setIsMarkingSet(false);
-    } finally {
-      buttonScale.value = withSpring(1, { damping: 15, stiffness: 300 });
-    }
+    }, 800);
+    buttonScale.value = withSpring(1, { damping: 15, stiffness: 300 });
   };
 
   const onPrev = () => {
@@ -412,26 +492,35 @@ export default function WorkoutSessionScreen() {
   };
 
   useEffect(() => {
-    if (restRemainingSec === null) return;
-    if (restRemainingSec <= 0) {
+    if (restEndsAt === null) {
+      return;
+    }
+
+    const updateRestRemaining = () => {
+      const nextRemaining = Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000));
+      setRestRemainingSec((prev) => (prev === nextRemaining ? prev : nextRemaining));
+      if (nextRemaining > 0) return;
+
+      setRestEndsAt(null);
       restCompleteOpacity.value = withTiming(1, { duration: 300 });
       restCompleteScale.value = withSpring(1, { damping: 12, stiffness: 400 });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      if (appStateStatus === "active") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
 
       setTimeout(() => {
         restCompleteOpacity.value = withTiming(0, { duration: 300 });
         restCompleteScale.value = withTiming(0.5, { duration: 300 });
         setRestRemainingSec(null);
       }, 1200);
-      return;
-    }
-    const id = setInterval(() => {
-      setRestRemainingSec((prev) =>
-        prev !== null ? Math.max(0, prev - 1) : null,
-      );
-    }, 1000);
+    };
+
+    updateRestRemaining();
+    if (appStateStatus !== "active") return;
+
+    const id = setInterval(updateRestRemaining, 1000);
     return () => clearInterval(id);
-  }, [restRemainingSec, restCompleteOpacity, restCompleteScale]);
+  }, [appStateStatus, restEndsAt, restCompleteOpacity, restCompleteScale]);
 
   useEffect(() => {
     if (progressWidth.value !== overallPercent) {
@@ -473,7 +562,8 @@ export default function WorkoutSessionScreen() {
         totalSets: currentExercise.sets.length,
         reps: currentSet.reps,
         weight: weightDisplay,
-        restTimeRemaining: restRemainingSec || undefined,
+        restTimeRemaining: liveActivityRestRemaining,
+        restEndsAt: restEndsAt || undefined,
         restEnabled,
         isSuperset: !!currentExercise.groupId,
         supersetInfo: currentExercise.groupId
@@ -504,7 +594,8 @@ export default function WorkoutSessionScreen() {
     currentSetIndex,
     convertWeight,
     formatWeight,
-    restRemainingSec,
+    liveActivityRestRemaining,
+    restEndsAt,
     restEnabled,
     startWorkoutActivity,
     weightUnit,
@@ -544,7 +635,8 @@ export default function WorkoutSessionScreen() {
         totalSets: currentExercise.sets.length,
         reps: currentSet.reps,
         weight: weightDisplay,
-        restTimeRemaining: restRemainingSec || undefined,
+        restTimeRemaining: liveActivityRestRemaining,
+        restEndsAt: restEndsAt || undefined,
         restEnabled,
         isSuperset: !!currentExercise.groupId,
         supersetInfo: currentExercise.groupId
@@ -569,8 +661,9 @@ export default function WorkoutSessionScreen() {
     liveActivityId,
     currentExerciseIndex,
     currentSetIndex,
-    restRemainingSec,
     restEnabled,
+    liveActivityRestRemaining,
+    restEndsAt,
     weightUnit,
     convertWeight,
     formatWeight,
@@ -614,7 +707,8 @@ export default function WorkoutSessionScreen() {
     (currentExercise as any)?.mediaSource || (currentExerciseMeta as any)?.mediaSource;
   const currentYoutubeUrl = currentMediaSource?.youtubeUrl as string | undefined;
   const currentYoutubeStartSec = currentMediaSource?.sourceStartSec as number | undefined;
-  const markDisabled = !!currentSet?.done || isMarkingSet || isAnyOverlayActive;
+  const currentSetKey = getSetKey(currentExerciseIndex, currentSetIndex);
+  const markDisabled = !!currentSet?.done || optimisticCompletedSetKeys.has(currentSetKey) || isMarkingSet || isAnyOverlayActive;
   const prevDisabled =
     (currentExerciseIndex === 0 && currentSetIndex === 0) ||
     isMarkingSet ||
@@ -660,12 +754,13 @@ export default function WorkoutSessionScreen() {
         <Pressable
           onPress={handleCancelWorkout}
           style={{
-            width: 32,
-            height: 32,
+            width: 40,
+            height: 40,
+            borderRadius: 20,
             justifyContent: "center",
-            alignItems: "flex-start",
+            alignItems: "center",
           }}
-          hitSlop={8}
+          hitSlop={4}
         >
           <Ionicons
             name="chevron-back"
@@ -714,7 +809,10 @@ export default function WorkoutSessionScreen() {
               restEnabled={restEnabled}
               onToggleRest={setRestEnabled}
               restRemainingSec={restRemainingSec}
-              onSkipRest={() => setRestRemainingSec(null)}
+              onSkipRest={() => {
+                setRestEndsAt(null);
+                setRestRemainingSec(null);
+              }}
             />
           )}
 

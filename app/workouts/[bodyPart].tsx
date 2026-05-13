@@ -15,29 +15,10 @@ export default function WorkoutsByBodyPartScreen() {
     return bodyPart;
   }, [bodyPart]);
 
-  const allTemplates = useQuery(api.templates.byBodyPart, effectiveBodyPart ? { bodyPart: effectiveBodyPart } : 'skip');
-  const templates = useMemo(() => {
-    if (!allTemplates) return allTemplates as any;
-    if (bodyPart === 'push') {
-      return (allTemplates as any[]).filter(t =>
-        /push/i.test(String(t.name || '')) || /push/i.test(String(t.variation || ''))
-      );
-    }
-    if (bodyPart === 'pull') {
-      return (allTemplates as any[]).filter(t =>
-        /pull/i.test(String(t.name || '')) || /pull/i.test(String(t.variation || ''))
-      );
-    }
-    return allTemplates as any;
-  }, [allTemplates, bodyPart]);
-  const exerciseIds = useMemo(() => {
-    const ids = new Set<string>();
-    (templates ?? []).forEach((t: any) => {
-      (t.items || []).forEach((it: any) => ids.add(it.exerciseId));
-    });
-    return Array.from(ids);
-  }, [templates]);
-  const exercises = useQuery(api.exercises.getMultiple, exerciseIds.length ? { exerciseIds: exerciseIds as any } : 'skip');
+  const templates = useQuery(
+    api.templates.byBodyPartWithExercises,
+    effectiveBodyPart ? { bodyPart: effectiveBodyPart, category: bodyPart } : 'skip'
+  );
   const subtitle = useMemo(() => {
     if (templates === undefined) return 'Loading workout templates...';
     if (templates.length === 0) return `No ${bodyPart} workouts are available yet`;
@@ -146,7 +127,7 @@ export default function WorkoutsByBodyPartScreen() {
                         Included exercises
                       </Text>
                       {template.items.map((item: any, index: number) => {
-                        const ex = (exercises ?? []).find((e: any) => e._id === item.exerciseId);
+                        const ex = template.exercises?.[String(item.exerciseId)];
                         const label = ex?.name || 'Exercise';
                         const isSuperset = !!item.groupId;
                         const supersetTag = isSuperset ? ` (Superset ${item.groupOrder || 1})` : '';

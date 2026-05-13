@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
 import * as LiveActivities from 'react-native-live-activities';
 
@@ -10,6 +10,7 @@ export interface WorkoutLiveActivityData {
   reps: number;
   weight?: string;
   restTimeRemaining?: number;
+  restEndsAt?: number;
   restEnabled?: boolean;
   isSuperset?: boolean;
   supersetInfo?: string;
@@ -23,7 +24,7 @@ export function useWorkoutLiveActivity() {
 
   const isSupported = Platform.OS === 'ios' && !!LiveActivities;
 
-  const startWorkoutActivity = async (data: WorkoutLiveActivityData): Promise<string | null> => {
+  const startWorkoutActivity = useCallback(async (data: WorkoutLiveActivityData): Promise<string | null> => {
     if (!isSupported) return null;
     try {
       const attributes = {
@@ -37,6 +38,7 @@ export function useWorkoutLiveActivity() {
         weight: data.weight,
         restEnabled: !!data.restEnabled,
         restTimeRemaining: data.restTimeRemaining ?? 0,
+        restEndsAt: data.restEndsAt ?? 0,
         isSuperset: !!data.isSuperset,
         supersetInfo: data.supersetInfo ?? undefined,
       };
@@ -46,9 +48,9 @@ export function useWorkoutLiveActivity() {
     } catch {
       return null;
     }
-  };
+  }, [isSupported, nativeLiveActivities]);
 
-  const updateWorkoutActivity = async (activityId: string, data: WorkoutLiveActivityData) => {
+  const updateWorkoutActivity = useCallback(async (activityId: string, data: WorkoutLiveActivityData) => {
     if (!isSupported || !activityId) return;
     try {
       const contentState = {
@@ -58,6 +60,7 @@ export function useWorkoutLiveActivity() {
         weight: data.weight,
         restEnabled: !!data.restEnabled,
         restTimeRemaining: data.restTimeRemaining ?? 0,
+        restEndsAt: data.restEndsAt ?? 0,
         isSuperset: !!data.isSuperset,
         supersetInfo: data.supersetInfo ?? undefined,
       };
@@ -65,9 +68,9 @@ export function useWorkoutLiveActivity() {
     } catch {
       // swallow
     }
-  };
+  }, [isSupported, nativeLiveActivities]);
 
-  const endWorkoutActivity = async (activityId: string) => {
+  const endWorkoutActivity = useCallback(async (activityId: string) => {
     if (!isSupported || !activityId) return;
     try {
       if (typeof nativeLiveActivities.endActivity === 'function') {
@@ -79,7 +82,7 @@ export function useWorkoutLiveActivity() {
     } catch {
       // swallow
     }
-  };
+  }, [isSupported, nativeLiveActivities]);
 
   return {
     isSupported,
