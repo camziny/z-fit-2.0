@@ -8,17 +8,8 @@ import { ScrollView, StyleSheet } from 'react-native';
 
 export default function WorkoutsByBodyPartScreen() {
   const { bodyPart } = useLocalSearchParams<{ bodyPart: string }>();
-  const effectiveBodyPart = useMemo(() => {
-    if (!bodyPart) return undefined;
-    if (bodyPart === 'push') return 'chest';
-    if (bodyPart === 'pull') return 'back';
-    return bodyPart;
-  }, [bodyPart]);
-
-  const templates = useQuery(
-    api.templates.byBodyPartWithExercises,
-    effectiveBodyPart ? { bodyPart: effectiveBodyPart, category: bodyPart } : 'skip'
-  );
+  const summariesByCategory = useQuery(api.templates.allCategorySummaries, {});
+  const templates = bodyPart ? summariesByCategory?.[bodyPart] : undefined;
   const subtitle = useMemo(() => {
     if (templates === undefined) return 'Loading workout templates...';
     if (templates.length === 0) return `No ${bodyPart} workouts are available yet`;
@@ -114,7 +105,7 @@ export default function WorkoutsByBodyPartScreen() {
                       color="$textLight300"
                       sx={{ _dark: { color: '$textDark300' } }}
                     >
-                      {template.items.length} exercises · {template.items.reduce((acc: number, it: any) => acc + it.sets.length, 0)} sets · ~{Math.max(1, Math.round(((template.items.flatMap((it: any) => it.sets).reduce((acc: number, s: any) => acc + (s.restSec ?? 60), 0)) + (template.items.flatMap((it: any) => it.sets).length * 40)) / 60))} min
+                      {template.items.length} exercises · {template.setCount} sets · ~{template.estimatedMinutes} min
                     </Text>
 
                     <VStack space="xs">
@@ -127,8 +118,6 @@ export default function WorkoutsByBodyPartScreen() {
                         Included exercises
                       </Text>
                       {template.items.map((item: any, index: number) => {
-                        const ex = template.exercises?.[String(item.exerciseId)];
-                        const label = ex?.name || 'Exercise';
                         const isSuperset = !!item.groupId;
                         const supersetTag = isSuperset ? ` (Superset ${item.groupOrder || 1})` : '';
                         return (
@@ -138,7 +127,7 @@ export default function WorkoutsByBodyPartScreen() {
                             color="$textLight300"
                             sx={{ _dark: { color: '$textDark300' } }}
                           >
-                            • {label}{supersetTag} · {item.sets.length} sets
+                            • {item.exerciseName}{supersetTag} · {item.setCount} sets
                           </Text>
                         );
                       })}

@@ -98,6 +98,83 @@ export const byBodyPartWithExercises = query({
   },
 });
 
+const workoutCategoryConfigs = [
+  { key: 'push', bodyPart: 'chest', category: 'push' },
+  { key: 'pull', bodyPart: 'back', category: 'pull' },
+  { key: 'legs', bodyPart: 'legs', category: 'legs' },
+  { key: 'chest', bodyPart: 'chest', category: 'chest' },
+  { key: 'back', bodyPart: 'back', category: 'back' },
+  { key: 'arms', bodyPart: 'arms', category: 'arms' },
+  { key: 'shoulders', bodyPart: 'shoulders', category: 'shoulders' },
+  { key: 'core', bodyPart: 'core', category: 'core' },
+];
+
+async function getTemplateSummaries(ctx: any, bodyPart: string, category?: string) {
+  const templates = await ctx.db
+    .query('templates')
+    .withIndex('by_body_part', (q: any) => q.eq('bodyPart', bodyPart))
+    .collect();
+  const filteredTemplates = category === 'push'
+    ? templates.filter((t: any) => /push/i.test(String(t.name || '')) || /push/i.test(String(t.variation || '')))
+    : category === 'pull'
+      ? templates.filter((t: any) => /pull/i.test(String(t.name || '')) || /pull/i.test(String(t.variation || '')))
+      : templates;
+  const exerciseIds = Array.from(new Set(filteredTemplates.flatMap((t: any) => t.items.map((item: any) => item.exerciseId))));
+  const exercises = await Promise.all(exerciseIds.map(id => ctx.db.get(id as any)));
+  const exerciseById = Object.fromEntries(
+    exercises
+      .filter(Boolean)
+      .map(exercise => [String(exercise!._id), exercise])
+  );
+
+  return filteredTemplates.map((template: any) => {
+    const items = template.items.map((item: any) => {
+      const exercise = exerciseById[String(item.exerciseId)] as any;
+      return {
+        exerciseId: item.exerciseId,
+        exerciseName: exercise?.name ?? 'Exercise',
+        order: item.order,
+        setCount: item.sets.length,
+        restSeconds: item.sets.reduce((acc: number, set: any) => acc + (set.restSec ?? 60), 0),
+        groupId: item.groupId,
+        groupOrder: item.groupOrder,
+      };
+    });
+    const setCount = items.reduce((acc: number, item: any) => acc + item.setCount, 0);
+    const restSeconds = items.reduce((acc: number, item: any) => acc + item.restSeconds, 0);
+
+    return {
+      _id: template._id,
+      name: template.name,
+      description: template.description,
+      items,
+      setCount,
+      estimatedMinutes: Math.max(1, Math.round((restSeconds + setCount * 40) / 60)),
+    };
+  });
+}
+
+export const byBodyPartSummaries = query({
+  args: { bodyPart: v.string(), category: v.optional(v.string()) },
+  handler: async (ctx, { bodyPart, category }) => {
+    return await getTemplateSummaries(ctx, bodyPart, category);
+  },
+});
+
+export const allCategorySummaries = query({
+  args: {},
+  handler: async (ctx) => {
+    const entries = await Promise.all(
+      workoutCategoryConfigs.map(async ({ key, bodyPart, category }) => [
+        key,
+        await getTemplateSummaries(ctx, bodyPart, category),
+      ])
+    );
+
+    return Object.fromEntries(entries);
+  },
+});
+
 export const getById = query({
   args: { templateId: v.id('templates') },
   handler: async (ctx, { templateId }) => {
