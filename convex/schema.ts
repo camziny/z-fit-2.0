@@ -116,7 +116,9 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index('by_user_started', ['userId', 'startedAt'])
-    .index('by_anon_started', ['anonKey', 'startedAt']),
+    .index('by_anon_started', ['anonKey', 'startedAt'])
+    .index('by_user_status_started', ['userId', 'status', 'startedAt'])
+    .index('by_anon_status_started', ['anonKey', 'status', 'startedAt']),
 
   progressionProfiles: defineTable({
     userId: v.optional(v.id('users')),
@@ -158,7 +160,9 @@ export default defineSchema({
   })
     .index('by_user_created', ['userId', 'createdAt'])
     .index('by_exercise_created', ['exerciseId', 'createdAt'])
-    .index('by_anon_created', ['anonKey', 'createdAt']),
+    .index('by_anon_created', ['anonKey', 'createdAt'])
+    .index('by_user_exercise_created', ['userId', 'exerciseId', 'createdAt'])
+    .index('by_anon_exercise_created', ['anonKey', 'exerciseId', 'createdAt']),
 });
 
 

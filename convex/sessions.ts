@@ -29,6 +29,45 @@ async function resolveExistingUserId(ctx: any, provided?: string) {
   return existing?._id;
 }
 
+async function getLatestAssessment(ctx: any, exerciseId: any, userId?: any, anonKey?: string) {
+  if (userId) {
+    return await ctx.db
+      .query('assessments')
+      .withIndex('by_user_exercise_created', (q: any) => q.eq('userId', userId).eq('exerciseId', exerciseId))
+      .order('desc')
+      .first();
+  }
+  if (anonKey) {
+    return await ctx.db
+      .query('assessments')
+      .withIndex('by_anon_exercise_created', (q: any) => q.eq('anonKey', anonKey).eq('exerciseId', exerciseId))
+      .order('desc')
+      .first();
+  }
+  return null;
+}
+
+async function getRecentSessions(ctx: any, userId?: any, anonKey?: string) {
+  const sessions: any[] = [];
+  if (userId) {
+    const userSessions = await ctx.db
+      .query('sessions')
+      .withIndex('by_user_started', (q: any) => q.eq('userId', userId))
+      .order('desc')
+      .take(25);
+    sessions.push(...userSessions);
+  }
+  if (anonKey) {
+    const anonSessions = await ctx.db
+      .query('sessions')
+      .withIndex('by_anon_started', (q: any) => q.eq('anonKey', anonKey))
+      .order('desc')
+      .take(25);
+    sessions.push(...anonSessions);
+  }
+  return sessions.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+}
+
 export const recordAssessment = mutation({
   args: {
     userId: v.optional(v.id('users')),
@@ -62,14 +101,7 @@ export const getLatestAssessments = query({
       effectiveUserId = await resolveUserId(ctx as any);
     }
     for (const exId of exerciseIds) {
-      const items = await ctx.db
-        .query('assessments')
-        .withIndex('by_exercise_created', q => q.eq('exerciseId', exId))
-        .collect();
-      let filtered = items;
-      if (effectiveUserId) filtered = filtered.filter(i => i.userId && i.userId === effectiveUserId);
-      else if (anonKey) filtered = filtered.filter(i => i.anonKey && i.anonKey === anonKey);
-      const latest = filtered.reduce((acc, cur) => (acc && acc.createdAt > cur.createdAt ? acc : cur), undefined as any);
+      const latest = await getLatestAssessment(ctx as any, exId, effectiveUserId, anonKey);
       if (latest) {
         result[exId] = latest;
       }
@@ -91,24 +123,24 @@ export const getLatestActiveSession = query({
     if (!effectiveUserId && !anonKey) {
       effectiveUserId = await resolveUserId(ctx as any);
     }
-    let sessions: any[] = [];
+    const sessions: any[] = [];
     if (effectiveUserId) {
-      const userSessions = await ctx.db
+      const userSession = await ctx.db
         .query('sessions')
-        .withIndex('by_user_started', q => q.eq('userId', effectiveUserId))
-        .collect();
-      sessions = sessions.concat(userSessions);
+        .withIndex('by_user_status_started', q => q.eq('userId', effectiveUserId).eq('status', 'active'))
+        .order('desc')
+        .first();
+      if (userSession) sessions.push(userSession);
     }
     if (anonKey) {
-      const anonSessions = await ctx.db
+      const anonSession = await ctx.db
         .query('sessions')
-        .withIndex('by_anon_started', q => q.eq('anonKey', anonKey))
-        .collect();
-      sessions = sessions.concat(anonSessions);
+        .withIndex('by_anon_status_started', q => q.eq('anonKey', anonKey).eq('status', 'active'))
+        .order('desc')
+        .first();
+      if (anonSession) sessions.push(anonSession);
     }
-    const active = sessions
-      .filter(s => s.status === 'active')
-      .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+    const active = sessions.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
     return active ?? null;
   },
 });
@@ -159,16 +191,17 @@ export const startFromTemplate = mutation({
         })
     );
 
-    const sessionId = await ctx.db.insert('sessions', {
+    const session = {
       userId: resolvedUserId,
       anonKey,
       templateId,
-      status: 'active',
+      status: 'active' as const,
       startedAt: now,
       createdAt: now,
       exercises: itemsWithNames,
-    });
-    return sessionId;
+    };
+    const sessionId = await ctx.db.insert('sessions', session);
+    return { sessionId, session: { ...session, _id: sessionId } };
   },
 });
 
@@ -181,11 +214,12 @@ export const markSetDone = mutation({
     if (!ex) throw new Error('Exercise not found');
     const st = ex.sets[args.setIndex];
     if (!st) throw new Error('Set not found');
+    if (st.done) return true;
     st.done = true;
     st.completedAt = Date.now();
     if (args.reps !== undefined) st.completedReps = args.reps;
     if (args.weight !== undefined) st.completedWeight = args.weight;
-    await ctx.db.replace(args.sessionId, s);
+    await ctx.db.patch(args.sessionId, { exercises: s.exercises });
     return true;
   },
 });
@@ -208,7 +242,7 @@ export const updatePlannedWeight = mutation({
       if (st.done) continue;
       st.weight = weightKg;
     }
-    await ctx.db.replace(sessionId, s);
+    await ctx.db.patch(sessionId, { exercises: s.exercises });
     return true;
   },
 });
@@ -231,7 +265,10 @@ export const recordExerciseRIR = mutation({
       const newUserId = await resolveUserId(ctx, userId as any);
       if (newUserId) s.userId = newUserId as any;
     }
-    await ctx.db.replace(sessionId, s);
+    await ctx.db.patch(sessionId, {
+      userId: s.userId,
+      exercises: s.exercises,
+    });
 
     // Update progression profile
     const resolvedUserId = (userId as any) ?? s.userId ?? undefined;
@@ -276,11 +313,13 @@ export const completeSession = mutation({
   handler: async (ctx, { sessionId }) => {
     const s = await ctx.db.get(sessionId);
     if (!s) throw new Error('Session not found');
+    if (s.status === 'completed') return true;
     const allSetsDone = s.exercises.every((ex: any) => ex.sets.every((set: any) => set.done));
     if (!allSetsDone) throw new Error('Cannot complete workout until all sets are saved');
-    s.status = 'completed';
-    s.completedAt = Date.now();
-    await ctx.db.replace(sessionId, s);
+    await ctx.db.patch(sessionId, {
+      status: 'completed',
+      completedAt: Date.now(),
+    });
     return true;
   },
 });
@@ -349,26 +388,15 @@ export const getSetupData = query({
           .query('progressionProfiles')
           .withIndex('by_user_exercise', (q: any) => q.eq('userId', effectiveUserId).eq('exerciseId', exId))
           .first();
-        if (prof) progressions[exId] = prof;
+        if (prof) {
+          progressions[exId] = prof;
+          if (prof.lastCompletedWeightKg !== undefined) latestCompleted[exId] = prof.lastCompletedWeightKg;
+        }
       }
     }
 
-    let sessions: any[] = [];
-    if (effectiveUserId) {
-      const userSessions = await ctx.db
-        .query('sessions')
-        .withIndex('by_user_started', (q: any) => q.eq('userId', effectiveUserId))
-        .collect();
-      sessions = sessions.concat(userSessions);
-    }
-    if (anonKey) {
-      const anonSessions = await ctx.db
-        .query('sessions')
-        .withIndex('by_anon_started', (q: any) => q.eq('anonKey', anonKey))
-        .collect();
-      sessions = sessions.concat(anonSessions);
-    }
-    sessions.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+    const missingLatest = exerciseIds.some((exId: any) => latestCompleted[exId] === undefined);
+    const sessions = missingLatest ? await getRecentSessions(ctx as any, effectiveUserId, anonKey) : [];
 
     for (const exId of exerciseIds) {
       if (latestCompleted[exId] !== undefined) continue;
@@ -387,16 +415,7 @@ export const getSetupData = query({
     }
 
     for (const exId of exerciseIds) {
-      const items = await ctx.db
-        .query('assessments')
-        .withIndex('by_exercise_created', (q: any) => q.eq('exerciseId', exId))
-        .collect();
-      const filtered = effectiveUserId
-        ? items.filter((item: any) => item.userId && item.userId === effectiveUserId)
-        : anonKey
-          ? items.filter((item: any) => item.anonKey && item.anonKey === anonKey)
-          : [];
-      const latest = filtered.reduce((acc: any, cur: any) => (acc && acc.createdAt > cur.createdAt ? acc : cur), undefined);
+      const latest = await getLatestAssessment(ctx as any, exId, effectiveUserId, anonKey);
       if (latest) latestAssessments[exId] = latest;
     }
 
@@ -416,26 +435,23 @@ export const getLatestCompletedWeights = query({
     const result: Record<string, number> = {};
     const effectiveUserId = userId ?? (await resolveUserId(ctx as any));
 
-    let sessions: any[] = [];
     if (effectiveUserId) {
-      const userSessions = await ctx.db
-        .query('sessions')
-        .withIndex('by_user_started', q => q.eq('userId', effectiveUserId))
-        .collect();
-      sessions = sessions.concat(userSessions);
-    }
-    if (anonKey) {
-      const anonSessions = await ctx.db
-        .query('sessions')
-        .withIndex('by_anon_started', q => q.eq('anonKey', anonKey))
-        .collect();
-      sessions = sessions.concat(anonSessions);
+      for (const exId of exerciseIds) {
+        const prof = await ctx.db
+          .query('progressionProfiles')
+          .withIndex('by_user_exercise', q => q.eq('userId', effectiveUserId).eq('exerciseId', exId))
+          .first();
+        if (prof?.lastCompletedWeightKg !== undefined) {
+          result[exId] = prof.lastCompletedWeightKg;
+        }
+      }
     }
 
-    sessions.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+    const missingLatest = exerciseIds.some((exId: any) => result[exId] === undefined);
+    const sessions = missingLatest ? await getRecentSessions(ctx as any, effectiveUserId, anonKey) : [];
 
     for (const exId of exerciseIds) {
-      if (result[exId]) continue;
+      if (result[exId] !== undefined) continue;
       for (const s of sessions) {
         const ex = (s.exercises || []).find((e: any) => e.exerciseId === exId);
         if (!ex) continue;

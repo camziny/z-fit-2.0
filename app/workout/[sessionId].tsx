@@ -27,16 +27,37 @@ import {
   WorkoutRoadmapModal,
 } from "@/components/workout";
 import type { Id } from "@/convex/_generated/dataModel";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import {
+  applyWorkoutOperation,
+  applyWorkoutOperations,
+  clearActiveSession,
+  createWorkoutOperationId,
+  loadActiveSession,
+  loadPendingWorkoutOperations,
+  removePendingWorkoutOperationsForSession,
+  saveActiveSession,
+  savePendingWorkoutOperations,
+  type WorkoutOperation,
+} from "@/utils/activeWorkoutStorage";
 
 export default function WorkoutSessionScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: Id<"sessions"> }>();
   const { weightUnit, convertWeight, formatWeight } = useWeightUnit();
   const { effectiveColorScheme } = useThemeMode();
-  const session = useQuery(
+  const remoteSession = useQuery(
     api.sessions.getSession,
     sessionId ? { sessionId } : "skip",
   );
+  const [localSession, setLocalSession] = useState<any | null>(null);
+  const [pendingOperations, setPendingOperations] = useState<WorkoutOperation[]>([]);
+  const session = useMemo(() => {
+    const baseSession = remoteSession ?? localSession;
+    if (!baseSession) return baseSession;
+    return applyWorkoutOperations(
+      baseSession,
+      pendingOperations.filter((operation) => String(operation.sessionId) === String(sessionId)),
+    );
+  }, [localSession, pendingOperations, remoteSession, sessionId]);
   const exerciseIds = useMemo(() => {
     if (!session) return [];
     const ids = new Set<string>();
@@ -53,10 +74,59 @@ export default function WorkoutSessionScreen() {
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
-  const markSetDone = useMutation(api.sessions.markSetDone);
-  const completeSession = useMutation(api.sessions.completeSession);
+  const markSetDone = useMutation(api.sessions.markSetDone).withOptimisticUpdate((localStore, args) => {
+    const current = localStore.getQuery(api.sessions.getSession, { sessionId: args.sessionId });
+    if (current !== undefined) {
+      localStore.setQuery(
+        api.sessions.getSession,
+        { sessionId: args.sessionId },
+        applyWorkoutOperation(current, {
+          id: createWorkoutOperationId("markSetDone"),
+          type: "markSetDone",
+          sessionId: String(args.sessionId),
+          exerciseIndex: args.exerciseIndex,
+          setIndex: args.setIndex,
+          reps: args.reps,
+          weight: args.weight,
+          createdAt: Date.now(),
+        }),
+      );
+    }
+  });
+  const completeSession = useMutation(api.sessions.completeSession).withOptimisticUpdate((localStore, args) => {
+    const current = localStore.getQuery(api.sessions.getSession, { sessionId: args.sessionId });
+    if (current !== undefined) {
+      localStore.setQuery(
+        api.sessions.getSession,
+        { sessionId: args.sessionId },
+        applyWorkoutOperation(current, {
+          id: createWorkoutOperationId("completeSession"),
+          type: "completeSession",
+          sessionId: String(args.sessionId),
+          createdAt: Date.now(),
+        }),
+      );
+    }
+  });
   const cancelSession = useMutation(api.sessions.cancelSession);
-  const updatePlannedWeight = useMutation(api.sessions.updatePlannedWeight);
+  const updatePlannedWeight = useMutation(api.sessions.updatePlannedWeight).withOptimisticUpdate((localStore, args) => {
+    const current = localStore.getQuery(api.sessions.getSession, { sessionId: args.sessionId });
+    if (current !== undefined) {
+      localStore.setQuery(
+        api.sessions.getSession,
+        { sessionId: args.sessionId },
+        applyWorkoutOperation(current, {
+          id: createWorkoutOperationId("updatePlannedWeight"),
+          type: "updatePlannedWeight",
+          sessionId: String(args.sessionId),
+          exerciseIndex: args.exerciseIndex,
+          fromSetIndex: args.fromSetIndex,
+          weightKg: args.weightKg,
+          createdAt: Date.now(),
+        }),
+      );
+    }
+  });
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [currentSetIndex, setCurrentSetIndex] = useState(0);
   const [restEnabled, setRestEnabled] = useState(false);
@@ -77,6 +147,8 @@ export default function WorkoutSessionScreen() {
   const cancelPromptOpenRef = useRef(false);
   const pendingHomeNavigationRef = useRef(false);
   const isCancellingWorkoutRef = useRef(false);
+  const isSyncingPendingOperationsRef = useRef(false);
+  const pendingOperationsRef = useRef<WorkoutOperation[]>([]);
 
   const buttonScale = useSharedValue(1);
   const progressWidth = useSharedValue(0);
@@ -92,25 +164,151 @@ export default function WorkoutSessionScreen() {
   const restCompleteOpacity = useSharedValue(0);
   const restCompleteScale = useSharedValue(0.5);
 
-  const recordRir = useMutation(api.sessions.recordExerciseRIR);
+  const recordRir = useMutation(api.sessions.recordExerciseRIR).withOptimisticUpdate((localStore, args) => {
+    const current = localStore.getQuery(api.sessions.getSession, { sessionId: args.sessionId });
+    if (current !== undefined) {
+      localStore.setQuery(
+        api.sessions.getSession,
+        { sessionId: args.sessionId },
+        applyWorkoutOperation(current, {
+          id: createWorkoutOperationId("recordExerciseRIR"),
+          type: "recordExerciseRIR",
+          sessionId: String(args.sessionId),
+          exerciseIndex: args.exerciseIndex,
+          rir: args.rir,
+          createdAt: Date.now(),
+        }),
+      );
+    }
+  });
 
   const getSetKey = useCallback((exerciseIndex: number, setIndex: number) => `${exerciseIndex}:${setIndex}`, []);
 
   useEffect(() => {
-    if (sessionId) {
-      AsyncStorage.setItem("z-fit-active-session-id", String(sessionId)).catch(
-        () => {},
-      );
-    }
+    let isActive = true;
+    const loadPersistedWorkout = async () => {
+      const [storedSession, storedOperations] = await Promise.all([
+        loadActiveSession(),
+        loadPendingWorkoutOperations(),
+      ]);
+      if (!isActive) return;
+      if (storedSession && String(storedSession._id) === String(sessionId)) {
+        setLocalSession(storedSession);
+      }
+      pendingOperationsRef.current = storedOperations;
+      setPendingOperations(storedOperations);
+    };
+    loadPersistedWorkout();
+    return () => {
+      isActive = false;
+    };
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!remoteSession || String(remoteSession._id) !== String(sessionId)) return;
+    if (pendingOperations.some((operation) => String(operation.sessionId) === String(sessionId))) return;
+    setLocalSession(remoteSession);
+    saveActiveSession(remoteSession).catch(() => {});
+  }, [pendingOperations, remoteSession, sessionId]);
   const { startWorkoutActivity, updateWorkoutActivity, endWorkoutActivity } =
     useWorkoutLiveActivity();
   const isAnyOverlayActive = isSetOverlayActive || isWorkoutOverlayActive;
 
   useEffect(() => {
+    pendingOperationsRef.current = pendingOperations;
+  }, [pendingOperations]);
+
+  const removePendingOperationById = useCallback(async (operationId: string) => {
+    const next = pendingOperationsRef.current.filter((operation) => operation.id !== operationId);
+    pendingOperationsRef.current = next;
+    setPendingOperations(next);
+    await savePendingWorkoutOperations(next);
+  }, []);
+
+  const enqueueWorkoutOperation = useCallback(
+    (operation: WorkoutOperation) => {
+      setPendingOperations((prev) => {
+        const next = [...prev, operation];
+        pendingOperationsRef.current = next;
+        savePendingWorkoutOperations(next).catch(() => {});
+        return next;
+      });
+      const baseSession = sessionRef.current ?? localSession;
+      const nextSession = applyWorkoutOperation(baseSession, operation);
+      if (nextSession) {
+        setLocalSession(nextSession);
+        saveActiveSession(nextSession).catch(() => {});
+      }
+    },
+    [localSession],
+  );
+
+  const replayWorkoutOperation = useCallback(
+    async (operation: WorkoutOperation) => {
+      if (operation.type === "markSetDone") {
+        await markSetDone({
+          sessionId: operation.sessionId as Id<"sessions">,
+          exerciseIndex: operation.exerciseIndex,
+          setIndex: operation.setIndex,
+          reps: operation.reps,
+          weight: operation.weight,
+        });
+        return;
+      }
+      if (operation.type === "updatePlannedWeight") {
+        await updatePlannedWeight({
+          sessionId: operation.sessionId as Id<"sessions">,
+          exerciseIndex: operation.exerciseIndex,
+          fromSetIndex: operation.fromSetIndex,
+          weightKg: operation.weightKg,
+        });
+        return;
+      }
+      if (operation.type === "recordExerciseRIR") {
+        await recordRir({
+          sessionId: operation.sessionId as Id<"sessions">,
+          exerciseIndex: operation.exerciseIndex,
+          rir: operation.rir,
+        });
+        return;
+      }
+      if (operation.type === "completeSession") {
+        await completeSession({ sessionId: operation.sessionId as Id<"sessions"> });
+      }
+    },
+    [completeSession, markSetDone, recordRir, updatePlannedWeight],
+  );
+
+  const syncPendingOperations = useCallback(async () => {
+    if (isSyncingPendingOperationsRef.current) return;
+    if (appStateStatus !== "active") return;
+    const currentPendingOperations = pendingOperationsRef.current.length === 0 ? pendingOperations : pendingOperationsRef.current;
+    const operationsForSession = currentPendingOperations.filter((operation) => String(operation.sessionId) === String(sessionId));
+    if (operationsForSession.length === 0) return;
+    isSyncingPendingOperationsRef.current = true;
+    try {
+      for (const operation of operationsForSession) {
+        try {
+          await replayWorkoutOperation(operation);
+        } catch (error) {
+          const message = String((error as any)?.message || error || "");
+          if (!message.includes("Session not found")) throw error;
+        }
+        await removePendingOperationById(operation.id);
+      }
+    } finally {
+      isSyncingPendingOperationsRef.current = false;
+    }
+  }, [appStateStatus, pendingOperations, removePendingOperationById, replayWorkoutOperation, sessionId]);
+
+  useEffect(() => {
     const subscription = AppState.addEventListener("change", setAppStateStatus);
     return () => subscription.remove();
   }, []);
+
+  useEffect(() => {
+    syncPendingOperations().catch(() => {});
+  }, [syncPendingOperations]);
 
   useEffect(() => {
     if (!session) return;
@@ -139,11 +337,19 @@ export default function WorkoutSessionScreen() {
 
   const handleRirSelect = async (exerciseIndex: number, rir: number) => {
     try {
-      await recordRir({
+      enqueueWorkoutOperation({
+        id: createWorkoutOperationId("recordExerciseRIR"),
+        type: "recordExerciseRIR",
+        sessionId: String(sessionId),
+        exerciseIndex,
+        rir,
+        createdAt: Date.now(),
+      });
+      recordRir({
         sessionId: sessionId as Id<"sessions">,
         exerciseIndex,
         rir,
-      });
+      }).catch(() => {});
 
       setTimeout(() => {
         if (!session) return;
@@ -162,9 +368,7 @@ export default function WorkoutSessionScreen() {
           setShowRirCollection(false);
         }
       }, 500);
-    } catch {
-      // Handle error if needed
-    }
+    } catch {}
   };
 
   const handleFinishWorkout = async () => {
@@ -175,24 +379,31 @@ export default function WorkoutSessionScreen() {
     celebrationScale.value = withTiming(0.5, { duration: 300 });
     setIsWorkoutOverlayActive(false);
 
-    try {
-      await completeSession({ sessionId: sessionId as Id<"sessions"> });
+    const operation: WorkoutOperation = {
+      id: createWorkoutOperationId("completeSession"),
+      type: "completeSession",
+      sessionId: String(sessionId),
+      createdAt: Date.now(),
+    };
+    enqueueWorkoutOperation(operation);
+    completeSession({
+      sessionId: sessionId as Id<"sessions">,
+    }).catch(() => {});
 
+    try {
       if (liveActivityId) {
         await endWorkoutActivity(liveActivityId);
         setLiveActivityId(null);
       }
 
-      try {
-        await AsyncStorage.removeItem("z-fit-active-session-id");
-      } catch {}
+      try { await clearActiveSession(); } catch {}
       navigateHomeAfterCleanup();
     } catch {
       setIsWorkoutOverlayActive(true);
       workoutCompleteOpacity.value = withTiming(1, { duration: 250 });
       celebrationOpacity.value = withTiming(1, { duration: 250 });
       celebrationScale.value = withSpring(1, { damping: 12, stiffness: 200 });
-      Alert.alert("Could not finish workout", "Please wait for your final set to sync, then try again.");
+      Alert.alert("Could not finish workout", "Please try again.");
     }
   };
 
@@ -224,8 +435,16 @@ export default function WorkoutSessionScreen() {
               }
               if (sessionId) {
                 await cancelSession({ sessionId: sessionId as Id<"sessions"> });
+                await removePendingWorkoutOperationsForSession(String(sessionId));
+                setPendingOperations((prev) =>
+                  {
+                    const next = prev.filter((operation) => String(operation.sessionId) !== String(sessionId));
+                    pendingOperationsRef.current = next;
+                    return next;
+                  },
+                );
               }
-              await AsyncStorage.removeItem("z-fit-active-session-id");
+              await clearActiveSession();
               navigateHomeAfterCleanup();
             } catch {
               isCancellingWorkoutRef.current = false;
@@ -340,37 +559,30 @@ export default function WorkoutSessionScreen() {
     const newProgress = Math.round(((completedSets + 1) / totalSets) * 100);
     progressWidth.value = withTiming(newProgress, { duration: 600 });
 
-    const markSetDonePromise = markSetDone({
+    const operation: WorkoutOperation = {
+      id: createWorkoutOperationId("markSetDone"),
+      type: "markSetDone",
+      sessionId: String(sessionId),
+      exerciseIndex: currentExerciseIndex,
+      setIndex: currentSetIndex,
+      weight: currentSet?.weight,
+      createdAt: Date.now(),
+    };
+    enqueueWorkoutOperation(operation);
+    markSetDone({
       sessionId: sessionId as Id<"sessions">,
       exerciseIndex: currentExerciseIndex,
       setIndex: currentSetIndex,
       weight: currentSet?.weight,
-    })
-      .then(() => true)
-      .catch(() => {
-        setOptimisticCompletedSetKeys((prev) => {
-          const next = new Set(prev);
-          next.delete(completedSetKey);
-          return next;
-        });
-        Alert.alert("Could not save set", "Your progress did not sync. Please try marking this set again.");
-        return false;
-      });
+    }).catch(() => {});
 
-    setTimeout(async () => {
+    setTimeout(() => {
       cardSuccessOpacity.value = withTiming(0, { duration: 100 });
       successCheckOpacity.value = withTiming(0, { duration: 100 });
       successCheckScale.value = withTiming(0.3, { duration: 100 });
       setIsSetOverlayActive(false);
       setOverlayExerciseComplete(false);
       setOverlayExerciseName("");
-
-      const wasSaved = await markSetDonePromise;
-      if (!wasSaved) {
-        progressWidth.value = withTiming(overallPercent, { duration: 300 });
-        setIsMarkingSet(false);
-        return;
-      }
 
       const latestSession = optimisticSession;
 
@@ -964,12 +1176,21 @@ export default function WorkoutSessionScreen() {
                             weightUnit,
                             "kg",
                           );
-                          await updatePlannedWeight({
+                          enqueueWorkoutOperation({
+                            id: createWorkoutOperationId("updatePlannedWeight"),
+                            type: "updatePlannedWeight",
+                            sessionId: String(sessionId),
+                            exerciseIndex: currentExerciseIndex,
+                            fromSetIndex: currentSetIndex,
+                            weightKg: nextKg,
+                            createdAt: Date.now(),
+                          });
+                          updatePlannedWeight({
                             sessionId: sessionId as Id<"sessions">,
                             exerciseIndex: currentExerciseIndex,
                             fromSetIndex: currentSetIndex,
                             weightKg: nextKg,
-                          });
+                          }).catch(() => {});
                         }
                       : undefined
                   }

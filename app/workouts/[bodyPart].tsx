@@ -3,22 +3,201 @@ import { api } from '@/convex/_generated/api';
 import { Box, Button, Text, VStack } from '@gluestack-ui/themed';
 import { useQuery } from 'convex/react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { memo, useCallback, useMemo } from 'react';
+import { FlatList, StyleSheet } from 'react-native';
+
+const WorkoutTemplateCard = memo(function WorkoutTemplateCard({
+  template,
+  onStartSetup,
+}: {
+  template: any;
+  onStartSetup: (template: any) => void;
+}) {
+  return (
+    <Box
+      bg="$cardLight"
+      sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
+      borderColor="$borderLight0"
+      borderWidth={1}
+      borderRadius={16}
+      p={24}
+    >
+      <VStack space="lg">
+        <VStack space="sm">
+          <Text 
+            size="xl" 
+            fontWeight="$semibold" 
+            color="$textLight0"
+            sx={{ _dark: { color: '$textDark0' } }}
+          >
+            {template.name}
+          </Text>
+          {template.description && (
+            <Text 
+              size="sm" 
+              color="$textLight200"
+              sx={{ _dark: { color: '$textDark200' } }}
+            >
+              {template.description}
+            </Text>
+          )}
+        </VStack>
+        
+        <VStack space="md">
+          <Text 
+            size="sm" 
+            color="$textLight300"
+            sx={{ _dark: { color: '$textDark300' } }}
+          >
+            {template.items.length} exercises · {template.setCount} sets · ~{template.estimatedMinutes} min
+          </Text>
+
+          <VStack space="xs">
+            <Text 
+              size="sm" 
+              fontWeight="$medium" 
+              color="$textLight200"
+              sx={{ _dark: { color: '$textDark200' } }}
+            >
+              Included exercises
+            </Text>
+            {template.items.map((item: any, index: number) => {
+              const isSuperset = !!item.groupId;
+              const supersetTag = isSuperset ? ` (Superset ${item.groupOrder || 1})` : '';
+              return (
+                <Text 
+                  key={`${item.exerciseId}:${index}`}
+                  size="sm" 
+                  color="$textLight300"
+                  sx={{ _dark: { color: '$textDark300' } }}
+                >
+                  • {item.exerciseName}{supersetTag} · {item.setCount} sets
+                </Text>
+              );
+            })}
+          </VStack>
+        </VStack>
+
+        <Button 
+          bg="$primary0"
+          sx={{ _dark: { bg: '$textDark0' } }}
+          onPress={() => onStartSetup(template)}
+          borderRadius={12}
+          h={48}
+          justifyContent="center"
+          alignItems="center"
+          px={24}
+        >
+          <Text 
+            color="$backgroundLight0"
+            sx={{ _dark: { color: '$backgroundDark0' } }}
+            fontWeight="$medium"
+            size="md"
+          >
+            Start Workout
+          </Text>
+        </Button>
+      </VStack>
+    </Box>
+  );
+});
 
 export default function WorkoutsByBodyPartScreen() {
   const { bodyPart } = useLocalSearchParams<{ bodyPart: string }>();
-  const summariesByCategory = useQuery(api.templates.allCategorySummaries, {});
-  const templates = bodyPart ? summariesByCategory?.[bodyPart] : undefined;
+  const templates = useQuery(
+    api.templates.byCategorySummaries,
+    bodyPart ? { categoryKey: bodyPart } : 'skip',
+  );
   const subtitle = useMemo(() => {
     if (templates === undefined) return 'Loading workout templates...';
     if (templates.length === 0) return `No ${bodyPart} workouts are available yet`;
     return 'Choose a template to get started';
   }, [templates, bodyPart]);
   
-  const onStartSetup = (template: any) => {
+  const onStartSetup = useCallback((template: any) => {
     router.push(`/workout-setup/${template._id}`);
-  };
+  }, []);
+
+  const renderTemplate = useCallback(
+    ({ item }: { item: any }) => (
+      <WorkoutTemplateCard template={item} onStartSetup={onStartSetup} />
+    ),
+    [onStartSetup],
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <VStack space="sm" pt={32}>
+        <Text 
+          size="3xl" 
+          fontWeight="$bold" 
+          color="$textLight0"
+          sx={{ _dark: { color: '$textDark0' } }}
+          textTransform="capitalize"
+        >
+          {bodyPart} Workouts
+        </Text>
+        <Text 
+          size="md" 
+          color="$textLight300"
+          sx={{ _dark: { color: '$textDark300' } }}
+        >
+          {subtitle}
+        </Text>
+      </VStack>
+    ),
+    [bodyPart, subtitle],
+  );
+
+  const listFooter = useMemo(
+    () => (
+      <VStack space="lg">
+        {templates === undefined && (
+          <Box p={24} alignItems="center">
+            <Text 
+              size="md" 
+              color="$textLight300"
+              sx={{ _dark: { color: '$textDark300' } }}
+              textAlign="center"
+            >
+              Loading workouts...
+            </Text>
+          </Box>
+        )}
+
+        {templates !== undefined && templates.length === 0 && (
+          <Box
+            bg="$cardLight"
+            sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
+            borderColor="$borderLight0"
+            borderWidth={1}
+            borderRadius={16}
+            p={24}
+          >
+            <VStack space="sm" alignItems="center">
+              <Text 
+                size="md" 
+                color="$textLight200"
+                sx={{ _dark: { color: '$textDark200' } }}
+                textAlign="center"
+              >
+                No {bodyPart} workouts are available yet
+              </Text>
+              <Text 
+                size="sm" 
+                color="$textLight300"
+                sx={{ _dark: { color: '$textDark300' } }}
+                textAlign="center"
+              >
+                Try another category, or check back soon.
+              </Text>
+            </VStack>
+          </Box>
+        )}
+      </VStack>
+    ),
+    [bodyPart, templates],
+  );
 
   if (!bodyPart) {
     return (
@@ -46,162 +225,18 @@ export default function WorkoutsByBodyPartScreen() {
       sx={{ _dark: { bg: '$backgroundDark0' } }} 
       flex={1}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <VStack space="2xl" p={24}>
-          <VStack space="sm" pt={32}>
-            <Text 
-              size="3xl" 
-              fontWeight="$bold" 
-              color="$textLight0"
-              sx={{ _dark: { color: '$textDark0' } }}
-              textTransform="capitalize"
-            >
-              {bodyPart} Workouts
-            </Text>
-            <Text 
-              size="md" 
-              color="$textLight300"
-              sx={{ _dark: { color: '$textDark300' } }}
-            >
-              {subtitle}
-            </Text>
-          </VStack>
-
-          <VStack space="lg">
-            {(templates ?? []).map((template: any) => (
-              <Box
-                key={template._id}
-                bg="$cardLight"
-                sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
-                borderColor="$borderLight0"
-                borderWidth={1}
-                borderRadius={16}
-                p={24}
-              >
-                <VStack space="lg">
-                  <VStack space="sm">
-                    <Text 
-                      size="xl" 
-                      fontWeight="$semibold" 
-                      color="$textLight0"
-                      sx={{ _dark: { color: '$textDark0' } }}
-                    >
-                      {template.name}
-                    </Text>
-                    {template.description && (
-                      <Text 
-                        size="sm" 
-                        color="$textLight200"
-                        sx={{ _dark: { color: '$textDark200' } }}
-                      >
-                        {template.description}
-                      </Text>
-                    )}
-                  </VStack>
-                  
-                  <VStack space="md">
-                    <Text 
-                      size="sm" 
-                      color="$textLight300"
-                      sx={{ _dark: { color: '$textDark300' } }}
-                    >
-                      {template.items.length} exercises · {template.setCount} sets · ~{template.estimatedMinutes} min
-                    </Text>
-
-                    <VStack space="xs">
-                      <Text 
-                        size="sm" 
-                        fontWeight="$medium" 
-                        color="$textLight200"
-                        sx={{ _dark: { color: '$textDark200' } }}
-                      >
-                        Included exercises
-                      </Text>
-                      {template.items.map((item: any, index: number) => {
-                        const isSuperset = !!item.groupId;
-                        const supersetTag = isSuperset ? ` (Superset ${item.groupOrder || 1})` : '';
-                        return (
-                          <Text 
-                            key={index} 
-                            size="sm" 
-                            color="$textLight300"
-                            sx={{ _dark: { color: '$textDark300' } }}
-                          >
-                            • {item.exerciseName}{supersetTag} · {item.setCount} sets
-                          </Text>
-                        );
-                      })}
-                    </VStack>
-                  </VStack>
-
-                  <Button 
-                    bg="$primary0"
-                    sx={{ _dark: { bg: '$textDark0' } }}
-                    onPress={() => onStartSetup(template)}
-                    borderRadius={12}
-                    h={48}
-                    justifyContent="center"
-                    alignItems="center"
-                    px={24}
-                  >
-                    <Text 
-                      color="$backgroundLight0"
-                      sx={{ _dark: { color: '$backgroundDark0' } }}
-                      fontWeight="$medium"
-                      size="md"
-                    >
-                      Start Workout
-                    </Text>
-                  </Button>
-                </VStack>
-              </Box>
-            ))}
-
-            {templates === undefined && (
-              <Box p={24} alignItems="center">
-                <Text 
-                  size="md" 
-                  color="$textLight300"
-                  sx={{ _dark: { color: '$textDark300' } }}
-                  textAlign="center"
-                >
-                  Loading workouts...
-                </Text>
-              </Box>
-            )}
-
-            {templates !== undefined && templates.length === 0 && (
-              <Box
-                bg="$cardLight"
-                sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
-                borderColor="$borderLight0"
-                borderWidth={1}
-                borderRadius={16}
-                p={24}
-              >
-                <VStack space="sm" alignItems="center">
-                  <Text 
-                    size="md" 
-                    color="$textLight200"
-                    sx={{ _dark: { color: '$textDark200' } }}
-                    textAlign="center"
-                  >
-                    No {bodyPart} workouts are available yet
-                  </Text>
-                  <Text 
-                    size="sm" 
-                    color="$textLight300"
-                    sx={{ _dark: { color: '$textDark300' } }}
-                    textAlign="center"
-                  >
-                    Try another category, or check back soon.
-                  </Text>
-                </VStack>
-              </Box>
-            )}
-          </VStack>
-        </VStack>
-      </ScrollView>
+      <FlatList
+        data={templates ?? []}
+        renderItem={renderTemplate}
+        keyExtractor={(item) => String(item._id)}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={listHeader}
+        ListFooterComponent={listFooter}
+        ItemSeparatorComponent={() => <Box h={16} />}
+        initialNumToRender={4}
+        windowSize={5}
+      />
     </Box>
   );
 }
@@ -209,5 +244,7 @@ export default function WorkoutsByBodyPartScreen() {
 const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
+    padding: 24,
+    paddingBottom: 120,
   },
 });
