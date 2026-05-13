@@ -21,6 +21,12 @@ import { Pressable } from 'react-native';
 
 WebBrowser.maybeCompleteAuthSession();
 
+const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string | undefined;
+const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL as string | undefined;
+const convexClient = new ConvexReactClient(convexUrl ?? '', {
+  unsavedChangesWarning: false,
+});
+
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   const rawMessage = String((error as any)?.message || error || '');
   const isConvexQuota = rawMessage.includes('free plan limits') || rawMessage.includes('deployments have been disabled');
@@ -71,9 +77,6 @@ export default function RootLayout() {
     return null;
   }
 
-  const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string | undefined;
-  const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL as string | undefined;
-  const convexClient = new ConvexReactClient(convexUrl ?? '');
   const renderHeaderBackButton = () => (
     <Pressable
       onPress={() => {
@@ -111,7 +114,6 @@ export default function RootLayout() {
                 options={{ 
                   headerShown: true, 
                   title: 'Sign In',
-                  headerBackTitleVisible: false,
                   headerBackButtonDisplayMode: 'minimal',
                   headerStyle: { backgroundColor: effectiveColorScheme === 'dark' ? '#343A40' : '#F8F9FA' },
                   headerTintColor: effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529',
@@ -140,11 +142,9 @@ export default function RootLayout() {
                 options={{ 
                   headerShown: true,
                   title: 'Setup',
-                  headerBackTitleVisible: false,
                   headerBackVisible: false,
                   headerLeft: renderHeaderBackButton,
                   headerBackButtonDisplayMode: 'minimal',
-                  headerLeftContainerStyle: { paddingLeft: 12 },
                   headerStyle: { backgroundColor: effectiveColorScheme === 'dark' ? '#343A40' : '#F8F9FA' },
                   headerTintColor: effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529',
                 }} 
@@ -154,7 +154,6 @@ export default function RootLayout() {
                 options={{ 
                   headerShown: true,
                   title: 'Active Workout',
-                  headerBackTitleVisible: false,
                   headerBackVisible: false,
                   headerBackButtonDisplayMode: 'minimal',
                   gestureEnabled: false,

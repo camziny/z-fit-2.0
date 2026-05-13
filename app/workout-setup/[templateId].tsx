@@ -57,25 +57,21 @@ export default function WorkoutSetupScreen() {
   const { effectiveColorScheme } = useThemeMode();
   const isDark = effectiveColorScheme === 'dark';
 
-  const template = useQuery(api.templates.getById, templateId ? { templateId: templateId as Id<'templates'> } : 'skip');
-  const exercises = useQuery(api.exercises.getMultiple, 
-    template ? { exerciseIds: template.items.map((item: any) => item.exerciseId) } : 'skip'
-  );
-  const progressions = useQuery(api.sessions.getProgressionsForExercises,
-    template ? { userId: undefined as any, exerciseIds: template.items.map((item: any) => item.exerciseId) } : 'skip'
-  );
-  const latestCompleted = useQuery(
-    api.sessions.getLatestCompletedWeights,
-    template && (user || isAnonLoaded)
-      ? { userId: undefined as any, anonKey: user ? undefined : (storedAnonKey || undefined), exerciseIds: template.items.map((item: any) => item.exerciseId) }
+  const setupData = useQuery(
+    api.sessions.getSetupData,
+    templateId && (user || isAnonLoaded)
+      ? {
+          templateId: templateId as Id<'templates'>,
+          userId: undefined as any,
+          anonKey: user ? undefined : (storedAnonKey || undefined),
+        }
       : 'skip'
   );
-  const latestAssessments = useQuery(
-    api.sessions.getLatestAssessments,
-    template && exercises && (user || isAnonLoaded)
-      ? { userId: undefined as any, anonKey: user ? undefined : (storedAnonKey || undefined), exerciseIds: template.items.map((i: any) => i.exerciseId) }
-      : 'skip'
-  );
+  const template = setupData?.template;
+  const exercises = setupData?.exercises as any[] | undefined;
+  const progressions = setupData?.progressions;
+  const latestCompleted = setupData?.latestCompleted;
+  const latestAssessments = setupData?.latestAssessments;
   const startFromTemplate = useMutation(api.sessions.startFromTemplate);
   const recordAssessment = useMutation(api.sessions.recordAssessment);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);

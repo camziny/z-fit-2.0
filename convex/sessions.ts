@@ -17,6 +17,18 @@ async function resolveUserId(ctx: any, provided?: string) {
   });
   return newId;
 }
+
+async function resolveExistingUserId(ctx: any, provided?: string) {
+  if (provided) return provided;
+  const identity = await ctx.auth.getUserIdentity?.();
+  if (!identity?.subject) return undefined;
+  const existing = await ctx.db
+    .query('users')
+    .withIndex('by_clerk_id', (q: any) => q.eq('clerkUserId', identity.subject))
+    .first();
+  return existing?._id;
+}
+
 export const recordAssessment = mutation({
   args: {
     userId: v.optional(v.id('users')),
@@ -264,6 +276,8 @@ export const completeSession = mutation({
   handler: async (ctx, { sessionId }) => {
     const s = await ctx.db.get(sessionId);
     if (!s) throw new Error('Session not found');
+    const allSetsDone = s.exercises.every((ex: any) => ex.sets.every((set: any) => set.done));
+    if (!allSetsDone) throw new Error('Cannot complete workout until all sets are saved');
     s.status = 'completed';
     s.completedAt = Date.now();
     await ctx.db.replace(sessionId, s);
@@ -309,6 +323,90 @@ export const getProgressionsForExercises = query({
       }
     }
     return result;
+  },
+});
+
+export const getSetupData = query({
+  args: {
+    templateId: v.id('templates'),
+    userId: v.optional(v.id('users')),
+    anonKey: v.optional(v.string()),
+  },
+  handler: async (ctx, { templateId, userId, anonKey }) => {
+    const template = await ctx.db.get(templateId);
+    if (!template) return null;
+
+    const exerciseIds = template.items.map((item: any) => item.exerciseId);
+    const exercises = (await Promise.all(exerciseIds.map((id: any) => ctx.db.get(id)))).filter(Boolean);
+    const effectiveUserId = await resolveExistingUserId(ctx as any, userId as any);
+    const progressions: Record<string, any> = {};
+    const latestCompleted: Record<string, number> = {};
+    const latestAssessments: Record<string, any> = {};
+
+    if (effectiveUserId) {
+      for (const exId of exerciseIds) {
+        const prof = await ctx.db
+          .query('progressionProfiles')
+          .withIndex('by_user_exercise', (q: any) => q.eq('userId', effectiveUserId).eq('exerciseId', exId))
+          .first();
+        if (prof) progressions[exId] = prof;
+      }
+    }
+
+    let sessions: any[] = [];
+    if (effectiveUserId) {
+      const userSessions = await ctx.db
+        .query('sessions')
+        .withIndex('by_user_started', (q: any) => q.eq('userId', effectiveUserId))
+        .collect();
+      sessions = sessions.concat(userSessions);
+    }
+    if (anonKey) {
+      const anonSessions = await ctx.db
+        .query('sessions')
+        .withIndex('by_anon_started', (q: any) => q.eq('anonKey', anonKey))
+        .collect();
+      sessions = sessions.concat(anonSessions);
+    }
+    sessions.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+
+    for (const exId of exerciseIds) {
+      if (latestCompleted[exId] !== undefined) continue;
+      for (const session of sessions) {
+        const exercise = session.exercises?.find((ex: any) => ex.exerciseId === exId);
+        if (!exercise) continue;
+        const completedSet = [...exercise.sets]
+          .reverse()
+          .find((set: any) => set.completedWeight !== undefined || set.weight !== undefined);
+        const value = completedSet?.completedWeight ?? completedSet?.weight;
+        if (value !== undefined) {
+          latestCompleted[exId] = value;
+          break;
+        }
+      }
+    }
+
+    for (const exId of exerciseIds) {
+      const items = await ctx.db
+        .query('assessments')
+        .withIndex('by_exercise_created', (q: any) => q.eq('exerciseId', exId))
+        .collect();
+      const filtered = effectiveUserId
+        ? items.filter((item: any) => item.userId && item.userId === effectiveUserId)
+        : anonKey
+          ? items.filter((item: any) => item.anonKey && item.anonKey === anonKey)
+          : [];
+      const latest = filtered.reduce((acc: any, cur: any) => (acc && acc.createdAt > cur.createdAt ? acc : cur), undefined);
+      if (latest) latestAssessments[exId] = latest;
+    }
+
+    return {
+      template,
+      exercises,
+      progressions,
+      latestCompleted,
+      latestAssessments,
+    };
   },
 });
 

@@ -29,7 +29,6 @@ export default function ActiveSessionResume() {
   useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
 
   const appState = useRef<AppStateStatus>(AppState.currentState);
-  const isNavigatingRef = useRef(false);
 
   useEffect(() => {
     const handleInitialUrl = async () => {
@@ -60,18 +59,10 @@ export default function ActiveSessionResume() {
   }, []);
 
   useEffect(() => {
-    const handleChange = async (nextState: AppStateStatus) => {
+    const handleChange = (nextState: AppStateStatus) => {
       if (appState.current.match(/inactive|background/) && nextState === 'active') {
-        if (isNavigatingRef.current) return;
-        isNavigatingRef.current = true;
-        try {
-          const stored = await AsyncStorage.getItem(STORAGE_KEY);
-          if (stored && !pathnameRef.current?.startsWith(`/workout/${stored}`)) {
-            router.replace(`/workout/${stored}`);
-          }
-        } finally {
-          isNavigatingRef.current = false;
-        }
+        appState.current = nextState;
+        return;
       }
       appState.current = nextState;
     };

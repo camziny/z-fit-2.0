@@ -71,6 +71,33 @@ export const byBodyPart = query({
   },
 });
 
+export const byBodyPartWithExercises = query({
+  args: { bodyPart: v.string(), category: v.optional(v.string()) },
+  handler: async (ctx, { bodyPart, category }) => {
+    const templates = await ctx.db
+      .query('templates')
+      .withIndex('by_body_part', q => q.eq('bodyPart', bodyPart))
+      .collect();
+    const filteredTemplates = category === 'push'
+      ? templates.filter(t => /push/i.test(String(t.name || '')) || /push/i.test(String(t.variation || '')))
+      : category === 'pull'
+        ? templates.filter(t => /pull/i.test(String(t.name || '')) || /pull/i.test(String(t.variation || '')))
+        : templates;
+    const exerciseIds = Array.from(new Set(filteredTemplates.flatMap(t => t.items.map(item => item.exerciseId))));
+    const exercises = await Promise.all(exerciseIds.map(id => ctx.db.get(id)));
+    const exerciseById = Object.fromEntries(
+      exercises
+        .filter(Boolean)
+        .map(exercise => [String(exercise!._id), exercise])
+    );
+
+    return filteredTemplates.map(template => ({
+      ...template,
+      exercises: exerciseById,
+    }));
+  },
+});
+
 export const getById = query({
   args: { templateId: v.id('templates') },
   handler: async (ctx, { templateId }) => {
