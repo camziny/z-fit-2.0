@@ -13,6 +13,7 @@
     },
     "production": {
       "environment": "production",
+      "distribution": "store",
       "autoIncrement": true,
       "ios": {
         "image": "macos-sequoia-15.5-xcode-26.0"
