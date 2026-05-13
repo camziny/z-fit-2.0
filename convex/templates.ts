@@ -109,11 +109,14 @@ const workoutCategoryConfigs = [
   { key: 'core', bodyPart: 'core', category: 'core' },
 ];
 
-async function getTemplateSummaries(ctx: any, bodyPart: string, category?: string) {
-  const templates = await ctx.db
+async function getTemplatesByBodyPart(ctx: any, bodyPart: string) {
+  return await ctx.db
     .query('templates')
     .withIndex('by_body_part', (q: any) => q.eq('bodyPart', bodyPart))
     .collect();
+}
+
+async function buildTemplateSummaries(ctx: any, templates: any[], category?: string) {
   const filteredTemplates = category === 'push'
     ? templates.filter((t: any) => /push/i.test(String(t.name || '')) || /push/i.test(String(t.variation || '')))
     : category === 'pull'
@@ -154,6 +157,11 @@ async function getTemplateSummaries(ctx: any, bodyPart: string, category?: strin
   });
 }
 
+async function getTemplateSummaries(ctx: any, bodyPart: string, category?: string) {
+  const templates = await getTemplatesByBodyPart(ctx, bodyPart);
+  return await buildTemplateSummaries(ctx, templates, category);
+}
+
 export const byBodyPartSummaries = query({
   args: { bodyPart: v.string(), category: v.optional(v.string()) },
   handler: async (ctx, { bodyPart, category }) => {
@@ -161,14 +169,34 @@ export const byBodyPartSummaries = query({
   },
 });
 
+export const byCategorySummaries = query({
+  args: { categoryKey: v.string() },
+  handler: async (ctx, { categoryKey }) => {
+    const config = workoutCategoryConfigs.find(({ key }) => key === categoryKey);
+    if (!config) return [];
+    return await getTemplateSummaries(ctx, config.bodyPart, config.category);
+  },
+});
+
 export const allCategorySummaries = query({
   args: {},
   handler: async (ctx) => {
+    const bodyPartTemplates = new Map<string, Promise<any[]>>();
+    const getTemplates = (bodyPart: string) => {
+      const cached = bodyPartTemplates.get(bodyPart);
+      if (cached) return cached;
+      const next = getTemplatesByBodyPart(ctx, bodyPart);
+      bodyPartTemplates.set(bodyPart, next);
+      return next;
+    };
     const entries = await Promise.all(
-      workoutCategoryConfigs.map(async ({ key, bodyPart, category }) => [
-        key,
-        await getTemplateSummaries(ctx, bodyPart, category),
-      ])
+      workoutCategoryConfigs.map(async ({ key, bodyPart, category }) => {
+        const templates = await getTemplates(bodyPart);
+        return [
+          key,
+          await buildTemplateSummaries(ctx, templates, category),
+        ];
+      })
     );
 
     return Object.fromEntries(entries);

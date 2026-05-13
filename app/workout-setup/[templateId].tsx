@@ -20,6 +20,7 @@ import { useMutation, useQuery } from 'convex/react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { saveActiveSession } from '@/utils/activeWorkoutStorage';
 
 const keyExercisesByBodyPart: Record<string, { press?: string[], pull?: string[] }> = {
   legs: { 
@@ -268,14 +269,21 @@ export default function WorkoutSetupScreen() {
         convertWeight
       );
       
-      const sessionId = await startFromTemplate({ 
+      const result = await startFromTemplate({ 
         templateId: template._id,
         anonKey: user ? undefined : (storedAnonKey || undefined),
         plannedWeights: weightsInKg,
       });
+      const sessionId = typeof result === 'string' ? result : result.sessionId;
       const nextSessionId = String(sessionId);
       setActiveSessionId(nextSessionId);
-      try { await AsyncStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, nextSessionId); } catch {}
+      try {
+        if (typeof result === 'string') {
+          await AsyncStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, nextSessionId);
+        } else {
+          await saveActiveSession(result.session);
+        }
+      } catch {}
       setIsStartingWorkout(false);
       router.push(`/workout/${sessionId}`);
     } catch {

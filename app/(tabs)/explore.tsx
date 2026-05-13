@@ -1,5 +1,4 @@
 import { useThemeMode } from '@/hooks/useThemeMode';
-import { usePrefetchWorkoutTemplates } from '@/hooks/usePrefetchWorkoutTemplates';
 import { Ionicons } from '@expo/vector-icons';
 import { Box, HStack, Pressable, Text, VStack } from '@gluestack-ui/themed';
 import { router } from 'expo-router';
@@ -18,7 +17,6 @@ const workoutCategories = [
 
 export default function ExploreScreen() {
   const { effectiveColorScheme } = useThemeMode();
-  usePrefetchWorkoutTemplates();
   const isDark = effectiveColorScheme === 'dark';
 
   return (
