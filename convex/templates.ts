@@ -116,19 +116,39 @@ async function getTemplatesByBodyPart(ctx: any, bodyPart: string) {
     .collect();
 }
 
-async function buildTemplateSummaries(ctx: any, templates: any[], category?: string) {
+async function getExerciseByIdMap(
+  ctx: any,
+  templates: any[],
+  exerciseCache: Map<string, Promise<any | null>> = new Map(),
+) {
+  const exerciseIds = Array.from(new Set(templates.flatMap((t: any) => t.items.map((item: any) => item.exerciseId))));
+  const entries = await Promise.all(
+    exerciseIds.map(async (id) => {
+      const key = String(id);
+      const cachedExercisePromise = exerciseCache.get(key);
+      const exercisePromise = cachedExercisePromise ?? ctx.db.get(id as any);
+      if (!cachedExercisePromise) {
+        exerciseCache.set(key, exercisePromise);
+      }
+      return [key, await exercisePromise] as const;
+    })
+  );
+
+  return Object.fromEntries(entries.filter(([, exercise]) => Boolean(exercise)));
+}
+
+async function buildTemplateSummaries(
+  ctx: any,
+  templates: any[],
+  category?: string,
+  exerciseCache?: Map<string, Promise<any | null>>,
+) {
   const filteredTemplates = category === 'push'
     ? templates.filter((t: any) => /push/i.test(String(t.name || '')) || /push/i.test(String(t.variation || '')))
     : category === 'pull'
       ? templates.filter((t: any) => /pull/i.test(String(t.name || '')) || /pull/i.test(String(t.variation || '')))
       : templates;
-  const exerciseIds = Array.from(new Set(filteredTemplates.flatMap((t: any) => t.items.map((item: any) => item.exerciseId))));
-  const exercises = await Promise.all(exerciseIds.map(id => ctx.db.get(id as any)));
-  const exerciseById = Object.fromEntries(
-    exercises
-      .filter(Boolean)
-      .map(exercise => [String(exercise!._id), exercise])
-  );
+  const exerciseById = await getExerciseByIdMap(ctx, filteredTemplates, exerciseCache);
 
   return filteredTemplates.map((template: any) => {
     const items = template.items.map((item: any) => {
@@ -182,6 +202,7 @@ export const allCategorySummaries = query({
   args: {},
   handler: async (ctx) => {
     const bodyPartTemplates = new Map<string, Promise<any[]>>();
+    const exerciseCache = new Map<string, Promise<any | null>>();
     const getTemplates = (bodyPart: string) => {
       const cached = bodyPartTemplates.get(bodyPart);
       if (cached) return cached;
@@ -194,7 +215,7 @@ export const allCategorySummaries = query({
         const templates = await getTemplates(bodyPart);
         return [
           key,
-          await buildTemplateSummaries(ctx, templates, category),
+          await buildTemplateSummaries(ctx, templates, category, exerciseCache),
         ];
       })
     );

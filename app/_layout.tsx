@@ -1,6 +1,7 @@
 import ActiveSessionResume from '@/components/ActiveSessionResume';
 import AuthSync from '@/components/AuthSync';
 import WorkoutMutationSync from '@/components/WorkoutMutationSync';
+import WorkoutSummaryPrefetch from '@/components/WorkoutSummaryPrefetch';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { Box, Button, GluestackUIProvider, Text, VStack } from '@gluestack-ui/themed';
@@ -108,6 +109,7 @@ export default function RootLayout() {
             <AuthSync />
             <ActiveSessionResume />
             <WorkoutMutationSync />
+            <WorkoutSummaryPrefetch />
             <Stack>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="+not-found" />
