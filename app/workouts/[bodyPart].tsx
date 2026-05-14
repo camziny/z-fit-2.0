@@ -1,9 +1,8 @@
-import { api } from '@/convex/_generated/api';
+import { useWorkoutCategorySummaries } from '@/hooks/useWorkoutCategorySummaries';
 
 import { Box, Button, Text, VStack } from '@gluestack-ui/themed';
-import { useQuery } from 'convex/react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet } from 'react-native';
 
 const WorkoutTemplateCard = memo(function WorkoutTemplateCard({
@@ -104,15 +103,33 @@ const WorkoutTemplateCard = memo(function WorkoutTemplateCard({
 
 export default function WorkoutsByBodyPartScreen() {
   const { bodyPart } = useLocalSearchParams<{ bodyPart: string }>();
-  const templates = useQuery(
-    api.templates.byCategorySummaries,
-    bodyPart ? { categoryKey: bodyPart } : 'skip',
-  );
+  const {
+    templates,
+    liveTemplates,
+    hasLoadedCache,
+    isLoading,
+    isUsingCache,
+    isConvexAuthLoading,
+  } = useWorkoutCategorySummaries(bodyPart);
+  const [isSlowConnection, setIsSlowConnection] = useState(false);
+
+  useEffect(() => {
+    setIsSlowConnection(false);
+    if (!bodyPart || !isLoading) return;
+    const timer = setTimeout(() => setIsSlowConnection(true), 4000);
+    return () => clearTimeout(timer);
+  }, [bodyPart, isLoading]);
+
+  const isRefreshingCachedEmpty = isUsingCache && (templates?.length ?? 0) === 0;
+
   const subtitle = useMemo(() => {
-    if (templates === undefined) return 'Loading workout templates...';
-    if (templates.length === 0) return `No ${bodyPart} workouts are available yet`;
+    if (isLoading && isSlowConnection) return isConvexAuthLoading ? 'Connecting securely...' : 'Still connecting to workouts...';
+    if (isLoading) return 'Loading workout templates...';
+    if (isRefreshingCachedEmpty) return 'Checking for latest workouts...';
+    if ((templates?.length ?? 0) === 0) return `No ${bodyPart} workouts are available yet`;
+    if (isUsingCache) return 'Choose a template to get started. Refreshing latest workouts...';
     return 'Choose a template to get started';
-  }, [templates, bodyPart]);
+  }, [bodyPart, isConvexAuthLoading, isLoading, isRefreshingCachedEmpty, isSlowConnection, isUsingCache, templates]);
   
   const onStartSetup = useCallback((template: any) => {
     router.push(`/workout-setup/${template._id}`);
@@ -160,12 +177,27 @@ export default function WorkoutsByBodyPartScreen() {
               sx={{ _dark: { color: '$textDark300' } }}
               textAlign="center"
             >
-              Loading workouts...
+              {isSlowConnection && hasLoadedCache
+                ? 'Still connecting to workouts...'
+                : 'Loading workouts...'}
             </Text>
           </Box>
         )}
 
-        {templates !== undefined && templates.length === 0 && (
+        {isRefreshingCachedEmpty && (
+          <Box p={24} alignItems="center">
+            <Text 
+              size="md" 
+              color="$textLight300"
+              sx={{ _dark: { color: '$textDark300' } }}
+              textAlign="center"
+            >
+              Checking for latest workouts...
+            </Text>
+          </Box>
+        )}
+
+        {templates !== undefined && templates.length === 0 && !isRefreshingCachedEmpty && (
           <Box
             bg="$cardLight"
             sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
@@ -196,7 +228,7 @@ export default function WorkoutsByBodyPartScreen() {
         )}
       </VStack>
     ),
-    [bodyPart, templates],
+    [bodyPart, hasLoadedCache, isRefreshingCachedEmpty, isSlowConnection, templates],
   );
 
   if (!bodyPart) {
@@ -227,6 +259,7 @@ export default function WorkoutsByBodyPartScreen() {
     >
       <FlatList
         data={templates ?? []}
+        extraData={liveTemplates}
         renderItem={renderTemplate}
         keyExtractor={(item) => String(item._id)}
         contentContainerStyle={styles.scrollContent}
