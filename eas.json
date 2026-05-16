@@ -16,7 +16,7 @@
       "distribution": "store",
       "autoIncrement": true,
       "ios": {
-        "image": "macos-sequoia-15.5-xcode-16.4"
+        "image": "macos-sequoia-15.5-xcode-26.0"
       }
     }
   },
