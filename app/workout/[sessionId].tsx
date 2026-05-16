@@ -966,19 +966,17 @@ export default function WorkoutSessionScreen() {
         <Pressable
           onPress={handleCancelWorkout}
           style={{
-            width: 40,
+            width: 32,
             height: 40,
-            borderRadius: 20,
-            backgroundColor: effectiveColorScheme === "dark" ? "#495057" : "#E9ECEF",
             justifyContent: "center",
-            alignItems: "center",
+            alignItems: "flex-start",
             padding: 0,
           }}
-          hitSlop={4}
+          hitSlop={12}
         >
           <Ionicons
             name="chevron-back"
-            size={22}
+            size={24}
             color={effectiveColorScheme === "dark" ? "#F8F9FA" : "#212529"}
           />
         </Pressable>

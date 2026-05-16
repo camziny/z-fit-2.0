@@ -132,7 +132,16 @@ export default function WorkoutsByBodyPartScreen() {
   }, [bodyPart, isConvexAuthLoading, isLoading, isRefreshingCachedEmpty, isSlowConnection, isUsingCache, templates]);
   
   const onStartSetup = useCallback((template: any) => {
-    router.push(`/workout-setup/${template._id}`);
+    router.push({
+      pathname: '/workout-setup/[templateId]',
+      params: {
+        templateId: template._id,
+        templateName: template.name,
+        exerciseCount: String(template.items.length),
+        setCount: String(template.setCount),
+        estimatedMinutes: String(template.estimatedMinutes),
+      },
+    });
   }, []);
 
   const renderTemplate = useCallback(

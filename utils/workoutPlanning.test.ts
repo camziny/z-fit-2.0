@@ -5,6 +5,7 @@ import {
   estimateOneRepMax,
   estimateWeightForReps,
   getDisplayIncrement,
+  getReferenceStrengthMultiplier,
   roundGymDisplayWeight,
 } from './workoutPlanning';
 import { convertWeight } from './weights';
@@ -41,6 +42,51 @@ describe('roundGymDisplayWeight', () => {
   it('rounds by single increment in kg', () => {
     expect(roundGymDisplayWeight(82.2, 'kg', { loadingMode: 'single' })).toBe(82.5);
     expect(roundGymDisplayWeight(81.1, 'kg', { loadingMode: 'single' })).toBe(80);
+  });
+});
+
+describe('getReferenceStrengthMultiplier', () => {
+  const snatchGripDeadlift = {
+    _id: 'snatch',
+    name: 'Snatch Grip Deadlift',
+    equipment: 'barbell' as const,
+    loadingMode: 'bar' as const,
+  };
+
+  it('keeps dumbbell gorilla row conservative from snatch grip deadlift', () => {
+    const gorillaRow = {
+      _id: 'gorilla-row',
+      name: 'Dumbbell Gorilla Row',
+      equipment: 'dumbbell' as const,
+      loadingMode: 'single' as const,
+    };
+    const multiplier = getReferenceStrengthMultiplier(snatchGripDeadlift, gorillaRow);
+    const suggestedWeight = roundGymDisplayWeight(
+      estimateWeightForReps(300 * multiplier, 12),
+      'lbs',
+      gorillaRow,
+    );
+
+    expect(multiplier).toBe(0.35);
+    expect(suggestedWeight).toBe(75);
+  });
+
+  it('keeps barbell curl conservative from snatch grip deadlift', () => {
+    const barbellCurl = {
+      _id: 'barbell-curl',
+      name: 'Barbell Curl',
+      equipment: 'barbell' as const,
+      loadingMode: 'bar' as const,
+    };
+    const multiplier = getReferenceStrengthMultiplier(snatchGripDeadlift, barbellCurl);
+    const suggestedWeight = roundGymDisplayWeight(
+      estimateWeightForReps(300 * multiplier, 8),
+      'lbs',
+      barbellCurl,
+    );
+
+    expect(multiplier).toBe(0.25);
+    expect(suggestedWeight).toBe(60);
   });
 });
 

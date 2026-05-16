@@ -9,6 +9,7 @@ import {
   estimateOneRepMax,
   estimateWeightForReps,
   getDisplayIncrement,
+  getReferenceStrengthMultiplier,
   roundGymDisplayWeight,
   type PlannedWeightValue,
 } from '@/utils/workoutPlanning';
@@ -48,10 +49,16 @@ const keyExercisesByBodyPart: Record<string, { press?: string[], pull?: string[]
 
 const ACTIVE_SESSION_STORAGE_KEY = 'z-fit-active-session-id';
 
+const getParamValue = (value: string | string[] | undefined): string | undefined =>
+  Array.isArray(value) ? value[0] : value;
+
 export default function WorkoutSetupScreen() {
   const params = useLocalSearchParams();
-  const templateParam = (params as any)?.templateId as string | string[] | undefined;
-  const templateId = Array.isArray(templateParam) ? templateParam[0] : templateParam;
+  const templateId = getParamValue((params as any)?.templateId);
+  const routeTemplateName = getParamValue((params as any)?.templateName);
+  const routeExerciseCount = getParamValue((params as any)?.exerciseCount);
+  const routeSetCount = getParamValue((params as any)?.setCount);
+  const routeEstimatedMinutes = getParamValue((params as any)?.estimatedMinutes);
   const { user } = useUser();
   const { anonKey: storedAnonKey, isLoaded: isAnonLoaded } = useAnonKey();
   const { weightUnit, convertWeight } = useWeightUnit();
@@ -81,6 +88,12 @@ export default function WorkoutSetupScreen() {
   const progressions = setupData?.progressions;
   const latestCompleted = setupData?.latestCompleted;
   const latestAssessments = setupData?.latestAssessments;
+  const loadingTitle = template?.name ?? routeTemplateName ?? 'Workout setup';
+  const loadingMeta = [
+    routeExerciseCount ? `${routeExerciseCount} exercises` : undefined,
+    routeSetCount ? `${routeSetCount} sets` : undefined,
+    routeEstimatedMinutes ? `~${routeEstimatedMinutes} min` : undefined,
+  ].filter(Boolean).join(' · ');
   const startFromTemplate = useMutation(api.sessions.startFromTemplate);
   const recordAssessment = useMutation(api.sessions.recordAssessment);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
@@ -217,9 +230,10 @@ export default function WorkoutSetupScreen() {
         const fallbackReference = familyReference ?? primaryReference;
         if (!fallbackReference) return;
 
-        const multiplier = familyReference
-          ? (movement === 'pull' ? 0.75 : 0.8)
-          : 0.65;
+        const multiplier = getReferenceStrengthMultiplier(fallbackReference.ex, ex, {
+          movement,
+          hasFamilyReference: !!familyReference,
+        });
         suggestions[item.exerciseId] = calculateSuggestedWeightsForSets(
           fallbackReference.data.value * multiplier,
           fallbackReference.data.type,
@@ -429,17 +443,67 @@ export default function WorkoutSetupScreen() {
       <Box 
         bg="$backgroundLight0" 
         sx={{ _dark: { bg: '$backgroundDark0' } }} 
-        flex={1} 
-        p={24}
-        justifyContent="center"
+        flex={1}
       >
-        <Text 
-          color="$textLight0"
-          sx={{ _dark: { color: '$textDark0' } }}
-          textAlign="center"
-        >
-          Loading workout details...
-        </Text>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <VStack space="xl" p={24} pb={120}>
+            <VStack space="xs" pt={32}>
+              <Text
+                size="sm"
+                color="$textLight300"
+                sx={{ _dark: { color: '$textDark300' } }}
+                textTransform="uppercase"
+                letterSpacing={1}
+              >
+                Setup
+              </Text>
+              <Text
+                size="3xl"
+                fontWeight="$bold"
+                color="$textLight0"
+                sx={{ _dark: { color: '$textDark0' } }}
+              >
+                {loadingTitle}
+              </Text>
+              {!!loadingMeta && (
+                <Text
+                  size="sm"
+                  color="$textLight300"
+                  sx={{ _dark: { color: '$textDark300' } }}
+                >
+                  {loadingMeta}
+                </Text>
+              )}
+            </VStack>
+
+            <Box
+              bg="$cardLight"
+              sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
+              borderColor="$borderLight0"
+              borderWidth={1}
+              borderRadius={20}
+              p={24}
+            >
+              <VStack space="sm">
+                <Text
+                  size="lg"
+                  fontWeight="$semibold"
+                  color="$textLight0"
+                  sx={{ _dark: { color: '$textDark0' } }}
+                >
+                  Preparing your workout
+                </Text>
+                <Text
+                  size="sm"
+                  color="$textLight300"
+                  sx={{ _dark: { color: '$textDark300' } }}
+                >
+                  Loading exercises and weight suggestions...
+                </Text>
+              </VStack>
+            </Box>
+          </VStack>
+        </ScrollView>
       </Box>
     );
   }
@@ -450,17 +514,48 @@ export default function WorkoutSetupScreen() {
         <Box 
           bg="$backgroundLight0" 
           sx={{ _dark: { bg: '$backgroundDark0' } }} 
-          flex={1} 
-          p={24}
-          justifyContent="center"
+          flex={1}
         >
-          <Text 
-            color="$textLight300"
-            sx={{ _dark: { color: '$textDark300' } }}
-            textAlign="center"
-          >
-            Preparing setup...
-          </Text>
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <VStack space="xl" p={24} pb={120}>
+              <VStack space="xs" pt={32}>
+                <Text
+                  size="sm"
+                  color="$textLight300"
+                  sx={{ _dark: { color: '$textDark300' } }}
+                  textTransform="uppercase"
+                  letterSpacing={1}
+                >
+                  Setup
+                </Text>
+                <Text
+                  size="3xl"
+                  fontWeight="$bold"
+                  color="$textLight0"
+                  sx={{ _dark: { color: '$textDark0' } }}
+                >
+                  {loadingTitle}
+                </Text>
+              </VStack>
+
+              <Box
+                bg="$cardLight"
+                sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
+                borderColor="$borderLight0"
+                borderWidth={1}
+                borderRadius={20}
+                p={24}
+              >
+                <Text
+                  size="sm"
+                  color="$textLight300"
+                  sx={{ _dark: { color: '$textDark300' } }}
+                >
+                  Preparing weight suggestions...
+                </Text>
+              </Box>
+            </VStack>
+          </ScrollView>
         </Box>
       );
     }
