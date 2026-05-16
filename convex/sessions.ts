@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
+import { computeNextPlannedWeight } from '../utils/workoutProgression';
 async function resolveUserId(ctx: any, provided?: string) {
   if (provided) return provided;
   const identity = await ctx.auth.getUserIdentity?.();
@@ -279,7 +280,11 @@ export const recordExerciseRIR = mutation({
         .withIndex('by_user_exercise', q => q.eq('userId', resolvedUserId).eq('exerciseId', ex.exerciseId));
       const existing = await profileQuery.first();
       const now = Date.now();
-      const nextPlannedWeightKg = computeNextPlannedWeight(lastCompletedWeightKg, rir);
+      const exerciseMeta = (await ctx.db.get(ex.exerciseId)) as any;
+      const nextPlannedWeightKg = computeNextPlannedWeight(lastCompletedWeightKg, rir, {
+        loadingMode: exerciseMeta?.loadingMode ?? ex.loadingMode,
+        roundingIncrementKg: exerciseMeta?.roundingIncrementKg,
+      });
       if (existing) {
         await ctx.db.patch(existing._id, {
           lastCompletedWeightKg,
@@ -303,10 +308,6 @@ export const recordExerciseRIR = mutation({
     return true;
   },
 });
-
-function computeNextPlannedWeight(lastCompletedWeightKg: number, rir: number): number {
-  return lastCompletedWeightKg;
-}
 
 export const completeSession = mutation({
   args: { sessionId: v.id('sessions') },
@@ -365,6 +366,23 @@ export const getProgressionsForExercises = query({
   },
 });
 
+async function getTemplateWithExercises(ctx: any, templateId: any) {
+  const template = await ctx.db.get(templateId);
+  if (!template) return null;
+  const exerciseIds = Array.from(new Set<any>(template.items.map((item: any) => item.exerciseId)));
+  const exercises = (await Promise.all(exerciseIds.map((id: any) => ctx.db.get(id)))).filter(Boolean);
+  return { template, exercises };
+}
+
+export const getSetupBaseData = query({
+  args: {
+    templateId: v.id('templates'),
+  },
+  handler: async (ctx, { templateId }) => {
+    return await getTemplateWithExercises(ctx as any, templateId);
+  },
+});
+
 export const getSetupData = query({
   args: {
     templateId: v.id('templates'),
@@ -372,22 +390,25 @@ export const getSetupData = query({
     anonKey: v.optional(v.string()),
   },
   handler: async (ctx, { templateId, userId, anonKey }) => {
-    const template = await ctx.db.get(templateId);
-    if (!template) return null;
+    const baseData = await getTemplateWithExercises(ctx as any, templateId);
+    if (!baseData) return null;
 
-    const exerciseIds = template.items.map((item: any) => item.exerciseId);
-    const exercises = (await Promise.all(exerciseIds.map((id: any) => ctx.db.get(id)))).filter(Boolean);
+    const { template, exercises } = baseData;
+    const exerciseIds = Array.from(new Set<any>(template.items.map((item: any) => item.exerciseId)));
     const effectiveUserId = await resolveExistingUserId(ctx as any, userId as any);
     const progressions: Record<string, any> = {};
     const latestCompleted: Record<string, number> = {};
     const latestAssessments: Record<string, any> = {};
 
     if (effectiveUserId) {
-      for (const exId of exerciseIds) {
+      const profiles = await Promise.all(exerciseIds.map(async (exId: any) => {
         const prof = await ctx.db
           .query('progressionProfiles')
           .withIndex('by_user_exercise', (q: any) => q.eq('userId', effectiveUserId).eq('exerciseId', exId))
           .first();
+        return { exId, prof };
+      }));
+      for (const { exId, prof } of profiles) {
         if (prof) {
           progressions[exId] = prof;
           if (prof.lastCompletedWeightKg !== undefined) latestCompleted[exId] = prof.lastCompletedWeightKg;
@@ -414,8 +435,11 @@ export const getSetupData = query({
       }
     }
 
-    for (const exId of exerciseIds) {
-      const latest = await getLatestAssessment(ctx as any, exId, effectiveUserId, anonKey);
+    const assessments = await Promise.all(exerciseIds.map(async (exId: any) => ({
+      exId,
+      latest: await getLatestAssessment(ctx as any, exId, effectiveUserId, anonKey),
+    })));
+    for (const { exId, latest } of assessments) {
       if (latest) latestAssessments[exId] = latest;
     }
 

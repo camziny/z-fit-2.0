@@ -58,6 +58,14 @@ export default function WorkoutSetupScreen() {
   const { effectiveColorScheme } = useThemeMode();
   const isDark = effectiveColorScheme === 'dark';
 
+  const setupBaseData = useQuery(
+    api.sessions.getSetupBaseData,
+    templateId
+      ? {
+          templateId: templateId as Id<'templates'>,
+        }
+      : 'skip'
+  );
   const setupData = useQuery(
     api.sessions.getSetupData,
     templateId && (user || isAnonLoaded)
@@ -68,8 +76,8 @@ export default function WorkoutSetupScreen() {
         }
       : 'skip'
   );
-  const template = setupData?.template;
-  const exercises = setupData?.exercises as any[] | undefined;
+  const template = setupData?.template ?? setupBaseData?.template;
+  const exercises = (setupData?.exercises ?? setupBaseData?.exercises) as any[] | undefined;
   const progressions = setupData?.progressions;
   const latestCompleted = setupData?.latestCompleted;
   const latestAssessments = setupData?.latestAssessments;
@@ -137,60 +145,92 @@ export default function WorkoutSetupScreen() {
       const suggestions: Record<string, PlannedWeightValue> = {};
       const weightedExercises = exercises.filter((ex: any) => ex.isWeighted);
       const effectiveAssessments = overrideAssessments ?? assessmentData;
-      const assessedExercises = Object.keys(effectiveAssessments);
+      const itemsSorted = [...(template.items || [])].sort((a: any, b: any) => a.order - b.order);
+      const bodyPartKeys = keyExercisesByBodyPart[template.bodyPart] || { press: [], pull: [] };
+      const weightedItems = itemsSorted
+        .map((item: any) => ({
+          item,
+          ex: weightedExercises.find((e: any) => e._id === item.exerciseId),
+        }))
+        .filter(({ ex }: any) => !!ex);
 
-      template.items.forEach((item: any) => {
-        const ex = weightedExercises.find((e: any) => e._id === item.exerciseId);
-        if (!ex) return;
+      const movementTypeFor = (ex: any): 'press' | 'pull' | undefined => {
+        const name = String(ex?.name || '').toLowerCase();
+        if (bodyPartKeys.press?.some(key => name.includes(key.split(' ')[0].toLowerCase()))) return 'press';
+        if (bodyPartKeys.pull?.some(key => name.includes(key.split(' ')[0].toLowerCase()))) return 'pull';
+        return undefined;
+      };
+
+      const directDataFor = (exerciseId: string): { value: number; type: '1rm' | 'working' } | undefined => {
+        if (effectiveAssessments[exerciseId]) return effectiveAssessments[exerciseId];
+        const latest = (latestAssessments as any)?.[exerciseId];
+        if (latest) {
+          const baseUnit = (latest.unit as any) || weightUnit;
+          return { value: convertWeight(latest.value, baseUnit, weightUnit as any), type: latest.type };
+        }
+        const lastCompletedKg = (latestCompleted as any)?.[exerciseId];
+        if (lastCompletedKg !== undefined) {
+          return { value: convertWeight(lastCompletedKg, 'kg', weightUnit), type: 'working' };
+        }
+        const progression = (progressions as any)?.[exerciseId];
+        if (progression?.nextPlannedWeightKg !== undefined) {
+          return { value: convertWeight(progression.nextPlannedWeightKg, 'kg', weightUnit), type: 'working' };
+        }
+        return undefined;
+      };
+
+      const templateWeightsFor = (item: any, exMeta: any): number[] | undefined => {
+        const firstKnownWeight = item.sets.find((set: any) => set.weight !== undefined)?.weight;
+        if (firstKnownWeight === undefined) return undefined;
+        return item.sets.map((set: any) => {
+          const weightKg = set.weight ?? firstKnownWeight;
+          return roundGym(convertWeight(weightKg, 'kg', weightUnit), exMeta);
+        });
+      };
+
+      const references = weightedItems
+        .map(({ item, ex }: any) => {
+          const data = directDataFor(item.exerciseId);
+          return data ? { item, ex, data, movement: movementTypeFor(ex) } : null;
+        })
+        .filter(Boolean) as { item: any; ex: any; data: { value: number; type: '1rm' | 'working' }; movement?: 'press' | 'pull' }[];
+      const primaryReference = references[0];
+
+      weightedItems.forEach(({ item, ex }: any) => {
         const exMeta = ex;
-
-        const latest = (latestAssessments as any)?.[item.exerciseId];
-        const progression = (progressions as any)?.[item.exerciseId];
-        const lastCompletedKg = (latestCompleted as any)?.[item.exerciseId];
-        if (assessedExercises.includes(item.exerciseId) || latest || lastCompletedKg !== undefined || progression?.nextPlannedWeightKg !== undefined) {
-          const data = assessedExercises.includes(item.exerciseId)
-            ? effectiveAssessments[item.exerciseId]
-            : latest
-              ? { value: latest.value, type: latest.type }
-              : lastCompletedKg !== undefined
-                ? { value: convertWeight(lastCompletedKg, 'kg', weightUnit), type: 'working' as const }
-                : { value: convertWeight(progression.nextPlannedWeightKg, 'kg', weightUnit), type: 'working' as const };
-          suggestions[item.exerciseId] = calculateSuggestedWeightsForSets(data.value, data.type, item.sets, exMeta);
+        const directData = directDataFor(item.exerciseId);
+        if (directData) {
+          suggestions[item.exerciseId] = calculateSuggestedWeightsForSets(directData.value, directData.type, item.sets, exMeta);
           return;
         }
 
-        const bodyPartKeys = keyExercisesByBodyPart[template.bodyPart] || { press: [], pull: [] };
-        const isPress = bodyPartKeys.press?.some(name => ex.name.includes(name.split(' ')[0]));
-        const isPull = bodyPartKeys.pull?.some(name => ex.name.includes(name.split(' ')[0]));
-
-        let baseExercise = null;
-        let multiplier = 0.8;
-
-        if (isPress) {
-          baseExercise = assessedExercises.find(id => {
-            const assessedEx = exercises.find((e: any) => e._id === id);
-            return assessedEx && bodyPartKeys.press?.some(name => assessedEx.name.includes(name.split(' ')[0]));
-          });
-          multiplier = 0.8;
-        } else if (isPull) {
-          baseExercise = assessedExercises.find(id => {
-            const assessedEx = exercises.find((e: any) => e._id === id);
-            return assessedEx && bodyPartKeys.pull?.some(name => assessedEx.name.includes(name.split(' ')[0]));
-          });
-          multiplier = 0.75;
+        const templateWeights = templateWeightsFor(item, exMeta);
+        if (templateWeights) {
+          suggestions[item.exerciseId] = templateWeights;
+          return;
         }
 
-        if (baseExercise) {
-          const baseData = effectiveAssessments[baseExercise];
-          const adjustedBase = baseData.value * multiplier;
-          const estimatedWeight = calculateSuggestedWeightsForSets(adjustedBase, baseData.type, item.sets, exMeta);
-          suggestions[item.exerciseId] = estimatedWeight;
-        }
+        const movement = movementTypeFor(ex);
+        const familyReference = movement
+          ? references.find(reference => reference.movement === movement)
+          : undefined;
+        const fallbackReference = familyReference ?? primaryReference;
+        if (!fallbackReference) return;
+
+        const multiplier = familyReference
+          ? (movement === 'pull' ? 0.75 : 0.8)
+          : 0.65;
+        suggestions[item.exerciseId] = calculateSuggestedWeightsForSets(
+          fallbackReference.data.value * multiplier,
+          fallbackReference.data.type,
+          item.sets,
+          exMeta
+        );
       });
 
       return suggestions;
     },
-    [template, exercises, assessmentData, latestAssessments, progressions, latestCompleted, convertWeight, weightUnit, calculateSuggestedWeightsForSets]
+    [template, exercises, assessmentData, latestAssessments, progressions, latestCompleted, convertWeight, weightUnit, calculateSuggestedWeightsForSets, roundGym]
   );
 
   useEffect(() => {
@@ -352,6 +392,37 @@ export default function WorkoutSetupScreen() {
     backgroundColor: isDark ? '#343A40' : '#F8F9FA',
     color: isDark ? '#F8F9FA' : '#212529',
   };
+
+  if (setupBaseData === null || setupData === null) {
+    return (
+      <Box
+        bg="$backgroundLight0"
+        sx={{ _dark: { bg: '$backgroundDark0' } }}
+        flex={1}
+        p={24}
+        justifyContent="center"
+      >
+        <VStack space="md" alignItems="center">
+          <Text
+            color="$textLight0"
+            sx={{ _dark: { color: '$textDark0' } }}
+            textAlign="center"
+            fontWeight="$bold"
+            size="lg"
+          >
+            Workout not found
+          </Text>
+          <Text
+            color="$textLight300"
+            sx={{ _dark: { color: '$textDark300' } }}
+            textAlign="center"
+          >
+            This workout may have been removed. Please choose another workout.
+          </Text>
+        </VStack>
+      </Box>
+    );
+  }
 
   if (!template) {
     return (

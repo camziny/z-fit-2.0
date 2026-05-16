@@ -969,14 +969,16 @@ export default function WorkoutSessionScreen() {
             width: 40,
             height: 40,
             borderRadius: 20,
+            backgroundColor: effectiveColorScheme === "dark" ? "#495057" : "#E9ECEF",
             justifyContent: "center",
             alignItems: "center",
+            padding: 0,
           }}
           hitSlop={4}
         >
           <Ionicons
             name="chevron-back"
-            size={24}
+            size={22}
             color={effectiveColorScheme === "dark" ? "#F8F9FA" : "#212529"}
           />
         </Pressable>
