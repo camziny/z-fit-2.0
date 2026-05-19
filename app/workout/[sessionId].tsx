@@ -4,6 +4,7 @@ import { useWorkoutLiveActivity } from "@/hooks/useLiveActivity";
 import { useWeightUnit } from "@/hooks/useWeightUnit";
 import { getDisplayIncrement } from "@/utils/workoutPlanning";
 import { Ionicons } from "@expo/vector-icons";
+import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Box, Button, HStack, Text, VStack } from "@gluestack-ui/themed";
 import { usePreventRemove } from "@react-navigation/native";
 import { useMutation, useQuery } from "convex/react";
@@ -39,9 +40,26 @@ import {
   savePendingWorkoutOperations,
   type WorkoutOperation,
 } from "@/utils/activeWorkoutStorage";
+import { cancelWorkoutSessionOverHttp } from "@/utils/publicWorkoutSummaryFetch";
+import { useAnonKey } from "@/hooks/useAnonKey";
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
 
 export default function WorkoutSessionScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: Id<"sessions"> }>();
+  const { user } = useUser();
+  const { getToken } = useAuth();
+  const { anonKey: storedAnonKey } = useAnonKey();
   const { weightUnit, convertWeight, formatWeight } = useWeightUnit();
   const { effectiveColorScheme } = useThemeMode();
   const remoteSession = useQuery(
@@ -108,7 +126,6 @@ export default function WorkoutSessionScreen() {
       );
     }
   });
-  const cancelSession = useMutation(api.sessions.cancelSession);
   const updatePlannedWeight = useMutation(api.sessions.updatePlannedWeight).withOptimisticUpdate((localStore, args) => {
     const current = localStore.getQuery(api.sessions.getSession, { sessionId: args.sessionId });
     if (current !== undefined) {
@@ -434,7 +451,20 @@ export default function WorkoutSessionScreen() {
                 setLiveActivityId(null);
               }
               if (sessionId) {
-                await cancelSession({ sessionId: sessionId as Id<"sessions"> });
+                const cancelSessionId = String(sessionId);
+                const cancelAnonKey = user ? undefined : (storedAnonKey || undefined);
+                const authToken = user
+                  ? await withTimeout(getToken({ template: "convex" }), 3000, "Unable to get auth token")
+                  : undefined;
+                await withTimeout(
+                  cancelWorkoutSessionOverHttp({
+                    sessionId: cancelSessionId,
+                    anonKey: cancelAnonKey,
+                    authToken,
+                  }),
+                  12000,
+                  "Workout cancel timed out"
+                );
                 await removePendingWorkoutOperationsForSession(String(sessionId));
                 setPendingOperations((prev) =>
                   {
@@ -445,6 +475,7 @@ export default function WorkoutSessionScreen() {
                 );
               }
               await clearActiveSession();
+              cancelPromptOpenRef.current = false;
               navigateHomeAfterCleanup();
             } catch {
               isCancellingWorkoutRef.current = false;
@@ -463,13 +494,15 @@ export default function WorkoutSessionScreen() {
       },
     );
   }, [
-    cancelSession,
     endWorkoutActivity,
+    getToken,
     isAnyOverlayActive,
     isCancellingWorkout,
     liveActivityId,
     navigateHomeAfterCleanup,
     sessionId,
+    storedAnonKey,
+    user,
   ]);
 
   usePreventRemove(!canLeaveWorkout && Boolean(sessionId), () => {
@@ -965,13 +998,16 @@ export default function WorkoutSessionScreen() {
       headerLeft: () => (
         <Pressable
           onPress={handleCancelWorkout}
-          style={{
-            width: 32,
+          android_ripple={{ color: "transparent", borderless: false }}
+          style={({ pressed }) => ({
+            width: 40,
             height: 40,
             justifyContent: "center",
-            alignItems: "flex-start",
+            alignItems: "center",
             padding: 0,
-          }}
+            backgroundColor: "transparent",
+            opacity: pressed ? 0.65 : 1,
+          })}
           hitSlop={12}
         >
           <Ionicons

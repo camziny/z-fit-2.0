@@ -13,20 +13,29 @@ import {
   roundGymDisplayWeight,
   type PlannedWeightValue,
 } from '@/utils/workoutPlanning';
-import { useUser } from '@clerk/clerk-expo';
+import { useAuth, useUser } from '@clerk/clerk-expo';
 import { Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery } from 'convex/react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { saveActiveSession } from '@/utils/activeWorkoutStorage';
+import {
+  fetchPublicWorkoutSetupBaseData,
+  startWorkoutFromTemplateOverHttp,
+} from '@/utils/publicWorkoutSummaryFetch';
+import {
+  loadCachedWorkoutSetupBaseData,
+  saveCachedWorkoutSetupBaseData,
+  type WorkoutSetupBaseData,
+} from '@/utils/workoutSetupCache';
 
 const keyExercisesByBodyPart: Record<string, { press?: string[], pull?: string[] }> = {
   legs: { 
     press: ['Back Squat', 'Front Squat', 'Leg Press'], 
-    pull: ['Romanian Deadlift', 'Stiff Leg Deadlift'] 
+    pull: ['Trap Bar Deadlift', 'Romanian Deadlift', 'Stiff Leg Deadlift'] 
   },
   chest: { 
     press: ['Bench Press', 'Incline Bench Press', 'Push-up'], 
@@ -48,9 +57,39 @@ const keyExercisesByBodyPart: Record<string, { press?: string[], pull?: string[]
 };
 
 const ACTIVE_SESSION_STORAGE_KEY = 'z-fit-active-session-id';
+const debugWorkoutLoading = process.env.EXPO_PUBLIC_WORKOUT_LOAD_DEBUG === 'true';
 
 const getParamValue = (value: string | string[] | undefined): string | undefined =>
   Array.isArray(value) ? value[0] : value;
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
+
+const matchesExerciseKey = (exerciseName: string, key: string): boolean => {
+  const normalizedName = exerciseName.toLowerCase();
+  const normalizedKey = key.toLowerCase();
+  return normalizedName.includes(normalizedKey) || normalizedName.includes(normalizedKey.split(' ')[0]);
+};
+
+const getMovementTypeForBodyPart = (
+  bodyPart: string | undefined,
+  exercise: any,
+): 'press' | 'pull' | undefined => {
+  const bodyPartKeys = keyExercisesByBodyPart[bodyPart || ''] || { press: [], pull: [] };
+  const name = String(exercise?.name || '').toLowerCase();
+  if (bodyPartKeys.press?.some(key => matchesExerciseKey(name, key))) return 'press';
+  if (bodyPartKeys.pull?.some(key => matchesExerciseKey(name, key))) return 'pull';
+  return undefined;
+};
 
 export default function WorkoutSetupScreen() {
   const params = useLocalSearchParams();
@@ -60,12 +99,19 @@ export default function WorkoutSetupScreen() {
   const routeSetCount = getParamValue((params as any)?.setCount);
   const routeEstimatedMinutes = getParamValue((params as any)?.estimatedMinutes);
   const { user } = useUser();
+  const { getToken } = useAuth();
   const { anonKey: storedAnonKey, isLoaded: isAnonLoaded } = useAnonKey();
   const { weightUnit, convertWeight } = useWeightUnit();
   const { effectiveColorScheme } = useThemeMode();
   const isDark = effectiveColorScheme === 'dark';
+  const setupRequestedAtRef = useRef(Date.now());
+  const hasLoggedLiveBaseResultRef = useRef(false);
+  const hasLoggedHttpBaseResultRef = useRef(false);
+  const hadCachedBaseDataRef = useRef(false);
+  const [cachedSetupBaseData, setCachedSetupBaseData] = useState<WorkoutSetupBaseData | undefined>();
+  const [httpSetupBaseData, setHttpSetupBaseData] = useState<WorkoutSetupBaseData | undefined>();
 
-  const setupBaseData = useQuery(
+  const liveSetupBaseData = useQuery(
     api.sessions.getSetupBaseData,
     templateId
       ? {
@@ -73,9 +119,16 @@ export default function WorkoutSetupScreen() {
         }
       : 'skip'
   );
+  const setupBaseData =
+    liveSetupBaseData !== undefined
+      ? liveSetupBaseData
+      : httpSetupBaseData !== undefined
+        ? httpSetupBaseData
+        : cachedSetupBaseData;
+  const baseTemplate = setupBaseData?.template;
   const setupData = useQuery(
     api.sessions.getSetupData,
-    templateId && (user || isAnonLoaded)
+    templateId && baseTemplate && (user || isAnonLoaded)
       ? {
           templateId: templateId as Id<'templates'>,
           userId: undefined as any,
@@ -83,8 +136,8 @@ export default function WorkoutSetupScreen() {
         }
       : 'skip'
   );
-  const template = setupData?.template ?? setupBaseData?.template;
-  const exercises = (setupData?.exercises ?? setupBaseData?.exercises) as any[] | undefined;
+  const template = setupBaseData?.template;
+  const exercises = setupBaseData?.exercises as any[] | undefined;
   const progressions = setupData?.progressions;
   const latestCompleted = setupData?.latestCompleted;
   const latestAssessments = setupData?.latestAssessments;
@@ -94,7 +147,6 @@ export default function WorkoutSetupScreen() {
     routeSetCount ? `${routeSetCount} sets` : undefined,
     routeEstimatedMinutes ? `~${routeEstimatedMinutes} min` : undefined,
   ].filter(Boolean).join(' · ');
-  const startFromTemplate = useMutation(api.sessions.startFromTemplate);
   const recordAssessment = useMutation(api.sessions.recordAssessment);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -102,6 +154,63 @@ export default function WorkoutSetupScreen() {
   const [assessmentData, setAssessmentData] = useState<Record<string, { value: number; type: '1rm' | 'working' }>>({});
   const [step, setStep] = useState<'assessment' | 'weights'>('assessment');
   const [plannedWeights, setPlannedWeights] = useState<Record<string, PlannedWeightValue>>({});
+
+  useEffect(() => {
+    let isActive = true;
+    setCachedSetupBaseData(undefined);
+    setHttpSetupBaseData(undefined);
+    hadCachedBaseDataRef.current = false;
+    hasLoggedLiveBaseResultRef.current = false;
+    hasLoggedHttpBaseResultRef.current = false;
+    setupRequestedAtRef.current = Date.now();
+
+    if (!templateId) {
+      return () => {
+        isActive = false;
+      };
+    }
+
+    loadCachedWorkoutSetupBaseData(templateId)
+      .then((data) => {
+        if (!isActive) return;
+        hadCachedBaseDataRef.current = data !== undefined;
+        setCachedSetupBaseData(data);
+      })
+      .catch(() => {});
+
+    fetchPublicWorkoutSetupBaseData(templateId)
+      .then((data) => {
+        if (!isActive || data === undefined) return;
+        setHttpSetupBaseData(data);
+        saveCachedWorkoutSetupBaseData(templateId, data).catch(() => {});
+        if (debugWorkoutLoading && !hasLoggedHttpBaseResultRef.current) {
+          hasLoggedHttpBaseResultRef.current = true;
+          console.info('workout-setup-http-base-settled', {
+            templateId,
+            elapsedMs: Date.now() - setupRequestedAtRef.current,
+            hadCachedBaseData: hadCachedBaseDataRef.current,
+          });
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isActive = false;
+    };
+  }, [templateId]);
+
+  useEffect(() => {
+    if (!templateId || liveSetupBaseData === undefined) return;
+    saveCachedWorkoutSetupBaseData(templateId, liveSetupBaseData).catch(() => {});
+    if (!debugWorkoutLoading || hasLoggedLiveBaseResultRef.current) return;
+    hasLoggedLiveBaseResultRef.current = true;
+    console.info('workout-setup-live-base-settled', {
+      templateId,
+      elapsedMs: Date.now() - setupRequestedAtRef.current,
+      hadCachedBaseData: cachedSetupBaseData !== undefined,
+      hadHttpBaseData: httpSetupBaseData !== undefined,
+    });
+  }, [cachedSetupBaseData, httpSetupBaseData, liveSetupBaseData, templateId]);
 
   const assessmentQuestions = useMemo<{ exercise: any; type: '1rm' | 'working'; question: string }[]>(() => {
     if (!template || !exercises) return [];
@@ -111,7 +220,7 @@ export default function WorkoutSetupScreen() {
       .filter((ex: any) => ex && ex.isWeighted);
     if (weightedByOrder.length === 0) return [];
     
-    const primary = weightedByOrder[0];
+    const primary = weightedByOrder.find((ex: any) => getMovementTypeForBodyPart(template.bodyPart, ex)) ?? weightedByOrder[0];
     return [{
       exercise: primary,
       type: '1rm' as const,
@@ -159,7 +268,6 @@ export default function WorkoutSetupScreen() {
       const weightedExercises = exercises.filter((ex: any) => ex.isWeighted);
       const effectiveAssessments = overrideAssessments ?? assessmentData;
       const itemsSorted = [...(template.items || [])].sort((a: any, b: any) => a.order - b.order);
-      const bodyPartKeys = keyExercisesByBodyPart[template.bodyPart] || { press: [], pull: [] };
       const weightedItems = itemsSorted
         .map((item: any) => ({
           item,
@@ -168,10 +276,7 @@ export default function WorkoutSetupScreen() {
         .filter(({ ex }: any) => !!ex);
 
       const movementTypeFor = (ex: any): 'press' | 'pull' | undefined => {
-        const name = String(ex?.name || '').toLowerCase();
-        if (bodyPartKeys.press?.some(key => name.includes(key.split(' ')[0].toLowerCase()))) return 'press';
-        if (bodyPartKeys.pull?.some(key => name.includes(key.split(' ')[0].toLowerCase()))) return 'pull';
-        return undefined;
+        return getMovementTypeForBodyPart(template.bodyPart, ex);
       };
 
       const directDataFor = (exerciseId: string): { value: number; type: '1rm' | 'working' } | undefined => {
@@ -207,7 +312,7 @@ export default function WorkoutSetupScreen() {
           return data ? { item, ex, data, movement: movementTypeFor(ex) } : null;
         })
         .filter(Boolean) as { item: any; ex: any; data: { value: number; type: '1rm' | 'working' }; movement?: 'press' | 'pull' }[];
-      const primaryReference = references[0];
+      const primaryReference = references.find(reference => reference.movement) ?? references[0];
 
       weightedItems.forEach(({ item, ex }: any) => {
         const exMeta = ex;
@@ -323,11 +428,19 @@ export default function WorkoutSetupScreen() {
         convertWeight
       );
       
-      const result = await startFromTemplate({ 
-        templateId: template._id,
-        anonKey: user ? undefined : (storedAnonKey || undefined),
-        plannedWeights: weightsInKg,
-      });
+      const authToken = user
+        ? await withTimeout(getToken({ template: 'convex' }), 3000, 'Unable to get auth token')
+        : undefined;
+      const result = await withTimeout(
+        startWorkoutFromTemplateOverHttp({
+          templateId: template._id,
+          anonKey: user ? undefined : (storedAnonKey || undefined),
+          plannedWeights: weightsInKg,
+          authToken,
+        }),
+        12000,
+        'Workout start timed out'
+      );
       const sessionId = typeof result === 'string' ? result : result.sessionId;
       const nextSessionId = String(sessionId);
       setActiveSessionId(nextSessionId);
@@ -340,9 +453,10 @@ export default function WorkoutSetupScreen() {
       } catch {}
       setIsStartingWorkout(false);
       router.push(`/workout/${sessionId}`);
-    } catch {
+    } catch (error) {
       setIsStartingWorkout(false);
-      Alert.alert('Failed to start workout', 'Something went wrong. Please try again.');
+      const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
+      Alert.alert('Failed to start workout', message);
     }
   };
 

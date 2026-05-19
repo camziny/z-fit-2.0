@@ -88,6 +88,47 @@ describe('getReferenceStrengthMultiplier', () => {
     expect(multiplier).toBe(0.25);
     expect(suggestedWeight).toBe(60);
   });
+
+  it('keeps side lateral raises below generic dumbbell scaling from bench', () => {
+    const benchPress = {
+      _id: 'bench-press',
+      name: 'Barbell Bench Press',
+      equipment: 'barbell' as const,
+      loadingMode: 'bar' as const,
+    };
+    const sideLateralRaise = {
+      _id: 'side-lateral-raise',
+      name: '1.5 Side Lateral Raise',
+      equipment: 'dumbbell' as const,
+      loadingMode: 'pair' as const,
+    };
+    const multiplier = getReferenceStrengthMultiplier(benchPress, sideLateralRaise);
+    const suggestedWeight = roundGymDisplayWeight(
+      estimateWeightForReps(300 * multiplier, 15),
+      'lbs',
+      sideLateralRaise,
+    );
+
+    expect(multiplier).toBe(0.3);
+    expect(suggestedWeight).toBe(60);
+  });
+
+  it('uses trap bar deadlift as a deadlift reference for dumbbell accessories', () => {
+    const trapBarDeadlift = {
+      _id: 'trap-bar-deadlift',
+      name: 'Trap Bar Deadlift',
+      equipment: 'barbell' as const,
+      loadingMode: 'bar' as const,
+    };
+    const reverseLunge = {
+      _id: 'reverse-lunge',
+      name: 'Dumbbell Reverse Lunge',
+      equipment: 'dumbbell' as const,
+      loadingMode: 'pair' as const,
+    };
+
+    expect(getReferenceStrengthMultiplier(trapBarDeadlift, reverseLunge)).toBe(0.3);
+  });
 });
 
 describe('buildPlannedWeightsInKg', () => {

@@ -1,6 +1,9 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 import { computeNextPlannedWeight } from '../utils/workoutProgression';
+const RECENT_SESSION_LIMIT = 25;
+const SETUP_RECENT_SESSION_LIMIT = 8;
+
 async function resolveUserId(ctx: any, provided?: string) {
   if (provided) return provided;
   const identity = await ctx.auth.getUserIdentity?.();
@@ -48,14 +51,14 @@ async function getLatestAssessment(ctx: any, exerciseId: any, userId?: any, anon
   return null;
 }
 
-async function getRecentSessions(ctx: any, userId?: any, anonKey?: string) {
+async function getRecentSessions(ctx: any, userId?: any, anonKey?: string, limit = RECENT_SESSION_LIMIT) {
   const sessions: any[] = [];
   if (userId) {
     const userSessions = await ctx.db
       .query('sessions')
       .withIndex('by_user_started', (q: any) => q.eq('userId', userId))
       .order('desc')
-      .take(25);
+      .take(limit);
     sessions.push(...userSessions);
   }
   if (anonKey) {
@@ -63,7 +66,7 @@ async function getRecentSessions(ctx: any, userId?: any, anonKey?: string) {
       .query('sessions')
       .withIndex('by_anon_started', (q: any) => q.eq('anonKey', anonKey))
       .order('desc')
-      .take(25);
+      .take(limit);
     sessions.push(...anonSessions);
   }
   return sessions.sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
@@ -326,11 +329,15 @@ export const completeSession = mutation({
 });
 
 export const cancelSession = mutation({
-  args: { sessionId: v.id('sessions') },
-  handler: async (ctx, { sessionId }) => {
+  args: { sessionId: v.id('sessions'), anonKey: v.optional(v.string()) },
+  handler: async (ctx, { sessionId, anonKey }) => {
     const s = await ctx.db.get(sessionId);
     if (!s) return true;
     if (s.status !== 'active') return true;
+    const identityUserId = await resolveExistingUserId(ctx as any);
+    const ownsUserSession = s.userId !== undefined && identityUserId !== undefined && String(s.userId) === String(identityUserId);
+    const ownsAnonSession = s.anonKey !== undefined && anonKey !== undefined && s.anonKey === anonKey;
+    if (!ownsUserSession && !ownsAnonSession) throw new Error('Unauthorized');
     await ctx.db.delete(sessionId);
     return true;
   },
@@ -390,10 +397,9 @@ export const getSetupData = query({
     anonKey: v.optional(v.string()),
   },
   handler: async (ctx, { templateId, userId, anonKey }) => {
-    const baseData = await getTemplateWithExercises(ctx as any, templateId);
-    if (!baseData) return null;
+    const template = await ctx.db.get(templateId);
+    if (!template) return null;
 
-    const { template, exercises } = baseData;
     const exerciseIds = Array.from(new Set<any>(template.items.map((item: any) => item.exerciseId)));
     const effectiveUserId = await resolveExistingUserId(ctx as any, userId as any);
     const progressions: Record<string, any> = {};
@@ -416,11 +422,24 @@ export const getSetupData = query({
       }
     }
 
-    const missingLatest = exerciseIds.some((exId: any) => latestCompleted[exId] === undefined);
-    const sessions = missingLatest ? await getRecentSessions(ctx as any, effectiveUserId, anonKey) : [];
+    const assessments = await Promise.all(exerciseIds.map(async (exId: any) => ({
+      exId,
+      latest: await getLatestAssessment(ctx as any, exId, effectiveUserId, anonKey),
+    })));
+    for (const { exId, latest } of assessments) {
+      if (latest) latestAssessments[exId] = latest;
+    }
+
+    const missingLatest = exerciseIds.some(
+      (exId: any) => latestCompleted[exId] === undefined && latestAssessments[exId] === undefined
+    );
+    const sessions = missingLatest
+      ? await getRecentSessions(ctx as any, effectiveUserId, anonKey, SETUP_RECENT_SESSION_LIMIT)
+      : [];
 
     for (const exId of exerciseIds) {
       if (latestCompleted[exId] !== undefined) continue;
+      if (latestAssessments[exId] !== undefined) continue;
       for (const session of sessions) {
         const exercise = session.exercises?.find((ex: any) => ex.exerciseId === exId);
         if (!exercise) continue;
@@ -435,17 +454,7 @@ export const getSetupData = query({
       }
     }
 
-    const assessments = await Promise.all(exerciseIds.map(async (exId: any) => ({
-      exId,
-      latest: await getLatestAssessment(ctx as any, exId, effectiveUserId, anonKey),
-    })));
-    for (const { exId, latest } of assessments) {
-      if (latest) latestAssessments[exId] = latest;
-    }
-
     return {
-      template,
-      exercises,
       progressions,
       latestCompleted,
       latestAssessments,
