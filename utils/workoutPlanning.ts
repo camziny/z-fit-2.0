@@ -53,6 +53,7 @@ export function getReferenceStrengthMultiplier(
 
   if (referenceExercise?._id && referenceExercise._id === targetExercise?._id) return 1;
   if (targetName.includes('curl')) return isDeadliftReference ? 0.25 : 0.35;
+  if (targetName.includes('lateral raise') || targetName.includes('side lateral')) return isDeadliftReference ? 0.2 : 0.3;
   if (targetName.includes('face pull') || targetName.includes('rear delt') || targetName.includes('angels and devils')) return 0.18;
   if (targetName.includes('triceps') || targetName.includes('pushdown') || targetName.includes('extension')) return isDeadliftReference ? 0.22 : 0.35;
   if (targetName.includes('straight arm') || targetName.includes('pullover')) return isDeadliftReference ? 0.24 : 0.35;

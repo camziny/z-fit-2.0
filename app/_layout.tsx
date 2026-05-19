@@ -26,6 +26,7 @@ WebBrowser.maybeCompleteAuthSession();
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY as string | undefined;
 const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL as string | undefined;
 const convexClient = new ConvexReactClient(convexUrl ?? '', {
+  logger: false,
   unsavedChangesWarning: false,
 });
 
@@ -85,13 +86,16 @@ export default function RootLayout() {
         if (router.canGoBack()) router.back();
         else router.replace('/(tabs)');
       }}
-      style={{
-        width: 32,
+      android_ripple={{ color: 'transparent', borderless: false }}
+      style={({ pressed }) => ({
+        width: 40,
         height: 40,
         justifyContent: 'center',
-        alignItems: 'flex-start',
+        alignItems: 'center',
         padding: 0,
-      }}
+        backgroundColor: 'transparent',
+        opacity: pressed ? 0.65 : 1,
+      })}
       hitSlop={12}
     >
       <Ionicons
