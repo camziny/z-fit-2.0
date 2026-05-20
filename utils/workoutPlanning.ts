@@ -41,6 +41,10 @@ export function roundGymDisplayWeight(
   return Math.round(weight / increment) * increment;
 }
 
+export function isMinimalLoadExercise(exercise: ExerciseWeightMeta | undefined): boolean {
+  return String(exercise?.name ?? '').toLowerCase().includes('reverse hyper');
+}
+
 export function getReferenceStrengthMultiplier(
   referenceExercise: ExerciseWeightMeta | undefined,
   targetExercise: ExerciseWeightMeta | undefined,
@@ -52,6 +56,7 @@ export function getReferenceStrengthMultiplier(
   const isDeadliftReference = referenceName.includes('deadlift');
 
   if (referenceExercise?._id && referenceExercise._id === targetExercise?._id) return 1;
+  if (isMinimalLoadExercise(targetExercise)) return 0;
   if (targetName.includes('curl')) return isDeadliftReference ? 0.25 : 0.35;
   if (targetName.includes('lateral raise') || targetName.includes('side lateral')) return isDeadliftReference ? 0.2 : 0.3;
   if (targetName.includes('face pull') || targetName.includes('rear delt') || targetName.includes('angels and devils')) return 0.18;
