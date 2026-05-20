@@ -6,6 +6,7 @@ import {
   estimateWeightForReps,
   getDisplayIncrement,
   getReferenceStrengthMultiplier,
+  isMinimalLoadExercise,
   roundGymDisplayWeight,
 } from './workoutPlanning';
 import { convertWeight } from './weights';
@@ -128,6 +129,31 @@ describe('getReferenceStrengthMultiplier', () => {
     };
 
     expect(getReferenceStrengthMultiplier(trapBarDeadlift, reverseLunge)).toBe(0.3);
+  });
+
+  it('prescribes reverse hyper at bodyweight regardless of squat reference', () => {
+    const backSquat = {
+      _id: 'back-squat',
+      name: 'Back Squat',
+      equipment: 'barbell' as const,
+      loadingMode: 'bar' as const,
+    };
+    const reverseHyper = {
+      _id: 'reverse-hyper',
+      name: 'Reverse Hyper',
+      equipment: 'machine' as const,
+      loadingMode: 'bar' as const,
+    };
+
+    expect(isMinimalLoadExercise(reverseHyper)).toBe(true);
+    expect(getReferenceStrengthMultiplier(backSquat, reverseHyper)).toBe(0);
+    expect(
+      roundGymDisplayWeight(
+        estimateWeightForReps(300 * getReferenceStrengthMultiplier(backSquat, reverseHyper), 15),
+        'lbs',
+        reverseHyper,
+      ),
+    ).toBe(0);
   });
 });
 

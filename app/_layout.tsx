@@ -87,21 +87,14 @@ export default function RootLayout() {
         else router.replace('/(tabs)');
       }}
       android_ripple={{ color: 'transparent', borderless: false }}
-      style={({ pressed }) => ({
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 0,
-        backgroundColor: 'transparent',
-        opacity: pressed ? 0.65 : 1,
-      })}
+      style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
       hitSlop={12}
     >
       <Ionicons
         name="chevron-back"
-        size={24}
+        size={28}
         color={effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529'}
+        style={{ marginLeft: -2 }}
       />
     </Pressable>
   );
@@ -153,6 +146,7 @@ export default function RootLayout() {
                   title: 'Setup',
                   headerBackVisible: false,
                   headerLeft: renderHeaderBackButton,
+                  headerLeftContainerStyle: { backgroundColor: 'transparent', paddingLeft: 4 },
                   headerBackButtonDisplayMode: 'minimal',
                   headerStyle: { backgroundColor: effectiveColorScheme === 'dark' ? '#343A40' : '#F8F9FA' },
                   headerTintColor: effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529',
