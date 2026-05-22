@@ -16,10 +16,10 @@ import { theme } from '../gluestack-theme';
 
 import 'react-native-reanimated';
 
+import { HeaderBackButton } from '@/components/HeaderBackButton';
+import { defaultHeaderBackHandler, workoutHeaderBackPressRef } from '@/components/workoutHeaderBackPress';
 import { useThemeMode } from '@/hooks/useThemeMode';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ErrorBoundaryProps } from 'expo-router';
-import { Pressable } from 'react-native';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -81,22 +81,11 @@ export default function RootLayout() {
   }
 
   const renderHeaderBackButton = () => (
-    <Pressable
-      onPress={() => {
-        if (router.canGoBack()) router.back();
-        else router.replace('/(tabs)');
-      }}
-      android_ripple={{ color: 'transparent', borderless: false }}
-      style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
-      hitSlop={12}
-    >
-      <Ionicons
-        name="chevron-back"
-        size={28}
-        color={effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529'}
-        style={{ marginLeft: -2 }}
-      />
-    </Pressable>
+    <HeaderBackButton onPress={defaultHeaderBackHandler} />
+  );
+
+  const renderWorkoutHeaderBackButton = () => (
+    <HeaderBackButton onPress={() => workoutHeaderBackPressRef.current()} />
   );
 
   return (
@@ -158,6 +147,8 @@ export default function RootLayout() {
                   headerShown: true,
                   title: 'Active Workout',
                   headerBackVisible: false,
+                  headerLeft: renderWorkoutHeaderBackButton,
+                  headerLeftContainerStyle: { backgroundColor: 'transparent', paddingLeft: 4 },
                   headerBackButtonDisplayMode: 'minimal',
                   gestureEnabled: false,
                   headerStyle: { backgroundColor: effectiveColorScheme === 'dark' ? '#343A40' : '#F8F9FA' },

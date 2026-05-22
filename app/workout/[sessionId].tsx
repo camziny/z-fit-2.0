@@ -9,8 +9,8 @@ import { Box, Button, HStack, Text, VStack } from "@gluestack-ui/themed";
 import { usePreventRemove } from "@react-navigation/native";
 import { useMutation, useQuery } from "convex/react";
 import * as Haptics from "expo-haptics";
-import { router, Stack, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, type AppStateStatus } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -41,6 +41,7 @@ import {
   type WorkoutOperation,
 } from "@/utils/activeWorkoutStorage";
 import { cancelWorkoutSessionOverHttp } from "@/utils/publicWorkoutSummaryFetch";
+import { defaultHeaderBackHandler, workoutHeaderBackPressRef } from "@/components/workoutHeaderBackPress";
 import { useAnonKey } from "@/hooks/useAnonKey";
 
 const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
@@ -504,6 +505,13 @@ export default function WorkoutSessionScreen() {
     storedAnonKey,
     user,
   ]);
+
+  useLayoutEffect(() => {
+    workoutHeaderBackPressRef.current = handleCancelWorkout;
+    return () => {
+      workoutHeaderBackPressRef.current = defaultHeaderBackHandler;
+    };
+  }, [handleCancelWorkout]);
 
   usePreventRemove(!canLeaveWorkout && Boolean(sessionId), () => {
     handleCancelWorkout();
@@ -992,34 +1000,9 @@ export default function WorkoutSessionScreen() {
     }
   };
 
-  const workoutScreenOptions = useMemo(
-    () => ({
-      gestureEnabled: false,
-      headerBackVisible: false,
-      headerLeftContainerStyle: { backgroundColor: "transparent", paddingLeft: 4 },
-      headerLeft: () => (
-        <Pressable
-          onPress={handleCancelWorkout}
-          android_ripple={{ color: "transparent", borderless: false }}
-          style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}
-          hitSlop={12}
-        >
-          <Ionicons
-            name="chevron-back"
-            size={28}
-            color={effectiveColorScheme === "dark" ? "#F8F9FA" : "#212529"}
-            style={{ marginLeft: -2 }}
-          />
-        </Pressable>
-      ),
-    }),
-    [effectiveColorScheme, handleCancelWorkout],
-  );
-
   if (!session || !currentExercise) {
     return (
       <Box bg="$background" flex={1} p={16} justifyContent="center">
-        <Stack.Screen options={workoutScreenOptions} />
         <Text size="lg" color="$textMuted" textAlign="center">
           Loading workout...
         </Text>
@@ -1033,7 +1016,6 @@ export default function WorkoutSessionScreen() {
       sx={{ _dark: { bg: "$backgroundDark0" } }}
       flex={1}
     >
-      <Stack.Screen options={workoutScreenOptions} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
