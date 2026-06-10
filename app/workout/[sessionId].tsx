@@ -10,7 +10,7 @@ import { usePreventRemove } from "@react-navigation/native";
 import { useMutation, useQuery } from "convex/react";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, AppState, Linking, Pressable, ScrollView, StyleSheet, type AppStateStatus } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -41,7 +41,6 @@ import {
   type WorkoutOperation,
 } from "@/utils/activeWorkoutStorage";
 import { cancelWorkoutSessionOverHttp } from "@/utils/publicWorkoutSummaryFetch";
-import { defaultHeaderBackHandler, workoutHeaderBackPressRef } from "@/components/workoutHeaderBackPress";
 import { useAnonKey } from "@/hooks/useAnonKey";
 
 const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
@@ -505,13 +504,6 @@ export default function WorkoutSessionScreen() {
     storedAnonKey,
     user,
   ]);
-
-  useLayoutEffect(() => {
-    workoutHeaderBackPressRef.current = handleCancelWorkout;
-    return () => {
-      workoutHeaderBackPressRef.current = defaultHeaderBackHandler;
-    };
-  }, [handleCancelWorkout]);
 
   usePreventRemove(!canLeaveWorkout && Boolean(sessionId), () => {
     handleCancelWorkout();

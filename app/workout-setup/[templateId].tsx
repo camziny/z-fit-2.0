@@ -6,6 +6,7 @@ import { useWeightUnit } from '@/hooks/useWeightUnit';
 import {
   DEFAULT_WORKING_REPS,
   buildPlannedWeightsInKg,
+  capLightIsolationWeight,
   estimateOneRepMax,
   estimateWeightForReps,
   getDisplayIncrement,
@@ -77,7 +78,10 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: 
 const matchesExerciseKey = (exerciseName: string, key: string): boolean => {
   const normalizedName = exerciseName.toLowerCase();
   const normalizedKey = key.toLowerCase();
-  return normalizedName.includes(normalizedKey) || normalizedName.includes(normalizedKey.split(' ')[0]);
+  if (normalizedName.includes(normalizedKey)) return true;
+  const keyWords = normalizedKey.split(/\s+/).filter(Boolean);
+  if (keyWords.length !== 1) return false;
+  return normalizedName.split(/[\s()+-]+/).some((part) => part === keyWords[0]);
 };
 
 const getMovementTypeForBodyPart = (
@@ -220,7 +224,7 @@ export default function WorkoutSetupScreen() {
       .filter((ex: any) => ex && ex.isWeighted);
     if (weightedByOrder.length === 0) return [];
     
-    const primary = weightedByOrder.find((ex: any) => getMovementTypeForBodyPart(template.bodyPart, ex)) ?? weightedByOrder[0];
+    const primary = weightedByOrder[0];
     return [{
       exercise: primary,
       type: '1rm' as const,
@@ -312,39 +316,45 @@ export default function WorkoutSetupScreen() {
           return data ? { item, ex, data, movement: movementTypeFor(ex) } : null;
         })
         .filter(Boolean) as { item: any; ex: any; data: { value: number; type: '1rm' | 'working' }; movement?: 'press' | 'pull' }[];
-      const primaryReference = references.find(reference => reference.movement) ?? references[0];
+      const anchorExerciseId = weightedItems[0]?.item?.exerciseId;
+      const primaryReference =
+        references.find((reference) => reference.item.exerciseId === anchorExerciseId) ??
+        references[0];
 
       weightedItems.forEach(({ item, ex }: any) => {
         const exMeta = ex;
         const directData = directDataFor(item.exerciseId);
         if (directData) {
           suggestions[item.exerciseId] = calculateSuggestedWeightsForSets(directData.value, directData.type, item.sets, exMeta);
-          return;
+        } else {
+          const templateWeights = templateWeightsFor(item, exMeta);
+          if (templateWeights) {
+            suggestions[item.exerciseId] = templateWeights;
+          } else {
+            const movement = movementTypeFor(ex);
+            const familyReference = movement
+              ? references.find(reference => reference.movement === movement)
+              : undefined;
+            const fallbackReference = familyReference ?? primaryReference;
+            if (fallbackReference) {
+              const multiplier = getReferenceStrengthMultiplier(fallbackReference.ex, ex, {
+                movement,
+                hasFamilyReference: !!familyReference,
+              });
+              suggestions[item.exerciseId] = calculateSuggestedWeightsForSets(
+                fallbackReference.data.value * multiplier,
+                fallbackReference.data.type,
+                item.sets,
+                exMeta
+              );
+            }
+          }
         }
 
-        const templateWeights = templateWeightsFor(item, exMeta);
-        if (templateWeights) {
-          suggestions[item.exerciseId] = templateWeights;
-          return;
+        const planned = suggestions[item.exerciseId];
+        if (planned !== undefined) {
+          suggestions[item.exerciseId] = capLightIsolationWeight(planned, weightUnit, exMeta);
         }
-
-        const movement = movementTypeFor(ex);
-        const familyReference = movement
-          ? references.find(reference => reference.movement === movement)
-          : undefined;
-        const fallbackReference = familyReference ?? primaryReference;
-        if (!fallbackReference) return;
-
-        const multiplier = getReferenceStrengthMultiplier(fallbackReference.ex, ex, {
-          movement,
-          hasFamilyReference: !!familyReference,
-        });
-        suggestions[item.exerciseId] = calculateSuggestedWeightsForSets(
-          fallbackReference.data.value * multiplier,
-          fallbackReference.data.type,
-          item.sets,
-          exMeta
-        );
       });
 
       return suggestions;
