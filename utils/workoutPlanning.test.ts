@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildPlannedWeightsInKg,
+  capLightIsolationWeight,
   estimateOneRepMax,
   estimateWeightForReps,
   getDisplayIncrement,
   getReferenceStrengthMultiplier,
+  isLightIsolationExercise,
   isMinimalLoadExercise,
   roundGymDisplayWeight,
 } from './workoutPlanning';
@@ -154,6 +156,28 @@ describe('getReferenceStrengthMultiplier', () => {
         reverseHyper,
       ),
     ).toBe(0);
+  });
+});
+
+describe('light isolation exercises', () => {
+  const rotatorCuff = {
+    _id: 'rotator-cuff',
+    name: 'Rotator Cuff External Rotation',
+    equipment: 'cable' as const,
+    loadingMode: 'single' as const,
+  };
+
+  it('identifies rotator cuff external rotation as light isolation', () => {
+    expect(isLightIsolationExercise(rotatorCuff)).toBe(true);
+  });
+
+  it('caps rotator cuff weights at 20 lbs', () => {
+    expect(capLightIsolationWeight(45, 'lbs', rotatorCuff)).toBe(20);
+    expect(capLightIsolationWeight([15, 25, 30], 'lbs', rotatorCuff)).toEqual([15, 20, 20]);
+  });
+
+  it('caps rotator cuff weights at 9 kg', () => {
+    expect(capLightIsolationWeight(20, 'kg', rotatorCuff)).toBe(9);
   });
 });
 

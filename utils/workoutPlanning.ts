@@ -45,6 +45,25 @@ export function isMinimalLoadExercise(exercise: ExerciseWeightMeta | undefined):
   return String(exercise?.name ?? '').toLowerCase().includes('reverse hyper');
 }
 
+export function isLightIsolationExercise(exercise: ExerciseWeightMeta | undefined): boolean {
+  const name = String(exercise?.name ?? '').toLowerCase();
+  return name.includes('rotator cuff') || name.includes('external rotation');
+}
+
+export function getMaxLightIsolationWeight(weightUnit: WeightUnit): number {
+  return weightUnit === 'kg' ? 9 : 20;
+}
+
+export function capLightIsolationWeight(
+  weight: PlannedWeightValue,
+  weightUnit: WeightUnit,
+  exercise: ExerciseWeightMeta | undefined
+): PlannedWeightValue {
+  if (!isLightIsolationExercise(exercise)) return weight;
+  const max = getMaxLightIsolationWeight(weightUnit);
+  return Array.isArray(weight) ? weight.map((value) => Math.min(value, max)) : Math.min(weight, max);
+}
+
 export function getReferenceStrengthMultiplier(
   referenceExercise: ExerciseWeightMeta | undefined,
   targetExercise: ExerciseWeightMeta | undefined,

@@ -16,8 +16,6 @@ import { theme } from '../gluestack-theme';
 
 import 'react-native-reanimated';
 
-import { HeaderBackButton } from '@/components/HeaderBackButton';
-import { defaultHeaderBackHandler, workoutHeaderBackPressRef } from '@/components/workoutHeaderBackPress';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import type { ErrorBoundaryProps } from 'expo-router';
 
@@ -80,14 +78,6 @@ export default function RootLayout() {
     return null;
   }
 
-  const renderHeaderBackButton = () => (
-    <HeaderBackButton onPress={defaultHeaderBackHandler} />
-  );
-
-  const renderWorkoutHeaderBackButton = () => (
-    <HeaderBackButton onPress={() => workoutHeaderBackPressRef.current()} />
-  );
-
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
@@ -133,9 +123,7 @@ export default function RootLayout() {
                 options={{ 
                   headerShown: true,
                   title: 'Setup',
-                  headerBackVisible: false,
-                  headerLeft: renderHeaderBackButton,
-                  headerLeftContainerStyle: { backgroundColor: 'transparent', paddingLeft: 4 },
+                  headerBackTitle: '',
                   headerBackButtonDisplayMode: 'minimal',
                   headerStyle: { backgroundColor: effectiveColorScheme === 'dark' ? '#343A40' : '#F8F9FA' },
                   headerTintColor: effectiveColorScheme === 'dark' ? '#F8F9FA' : '#212529',
@@ -146,9 +134,7 @@ export default function RootLayout() {
                 options={{ 
                   headerShown: true,
                   title: 'Active Workout',
-                  headerBackVisible: false,
-                  headerLeft: renderWorkoutHeaderBackButton,
-                  headerLeftContainerStyle: { backgroundColor: 'transparent', paddingLeft: 4 },
+                  headerBackTitle: '',
                   headerBackButtonDisplayMode: 'minimal',
                   gestureEnabled: false,
                   headerStyle: { backgroundColor: effectiveColorScheme === 'dark' ? '#343A40' : '#F8F9FA' },
