@@ -5,6 +5,7 @@ export default defineSchema({
   users: defineTable({
     clerkUserId: v.string(),
     displayName: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
     createdAt: v.number(),
   }).index('by_clerk_id', ['clerkUserId']),
 
@@ -163,6 +164,44 @@ export default defineSchema({
     .index('by_anon_created', ['anonKey', 'createdAt'])
     .index('by_user_exercise_created', ['userId', 'exerciseId', 'createdAt'])
     .index('by_anon_exercise_created', ['anonKey', 'exerciseId', 'createdAt']),
+
+  groups: defineTable({
+    name: v.string(),
+    inviteCode: v.optional(v.string()),
+    createdByUserId: v.id('users'),
+    createdAt: v.number(),
+  }).index('by_invite_code', ['inviteCode']),
+
+  groupInvitations: defineTable({
+    groupId: v.id('groups'),
+    invitedUserId: v.id('users'),
+    invitedByUserId: v.id('users'),
+    status: v.union(v.literal('pending'), v.literal('accepted'), v.literal('declined')),
+    createdAt: v.number(),
+    respondedAt: v.optional(v.number()),
+  })
+    .index('by_invited_user_status', ['invitedUserId', 'status'])
+    .index('by_group_and_invited_user', ['groupId', 'invitedUserId'])
+    .index('by_group_status', ['groupId', 'status']),
+
+  groupMembers: defineTable({
+    groupId: v.id('groups'),
+    userId: v.id('users'),
+    role: v.union(v.literal('owner'), v.literal('member')),
+    joinedAt: v.number(),
+  })
+    .index('by_group', ['groupId'])
+    .index('by_user', ['userId'])
+    .index('by_group_and_user', ['groupId', 'userId']),
+
+  userNotificationSettings: defineTable({
+    userId: v.id('users'),
+    expoPushToken: v.optional(v.string()),
+    notifyOnGroupWorkout: v.boolean(),
+    notifyWeeklyRecap: v.boolean(),
+    timezone: v.optional(v.string()),
+    lastWeeklyRecapSentAt: v.optional(v.number()),
+  }).index('by_user', ['userId']),
 });
 
 

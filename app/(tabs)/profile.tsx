@@ -3,6 +3,7 @@ import { useAuth, useUser } from '@clerk/clerk-expo';
 import { Avatar, AvatarFallbackText, AvatarImage, Box, Button, HStack, Text, VStack } from '@gluestack-ui/themed';
 import { useQuery } from 'convex/react';
 import { router } from 'expo-router';
+import { useMemo } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,58 +11,29 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { isSignedIn, user } = useUser();
   const { signOut } = useAuth();
+  const now = useMemo(() => Date.now(), []);
+  const timezoneOffsetMinutes = useMemo(() => new Date().getTimezoneOffset(), []);
   const convexUser = useQuery(
     api.users.me,
     isSignedIn && user ? { clerkUserId: user.id } : 'skip'
   );
-  const userHistory = useQuery(
-    api.sessions.historyForUser,
-    convexUser ? { userId: convexUser._id } : 'skip'
+  const overview = useQuery(
+    api.stats.myOverview,
+    convexUser ? { now, timezoneOffsetMinutes } : 'skip'
   );
+  const userHistory = useQuery(api.stats.myHistory, convexUser ? {} : 'skip');
 
-  const completedWorkouts = userHistory?.filter((s: any) => s.status === 'completed') || [];
-  
+  const completedWorkouts = userHistory?.filter((session) => session.status === 'completed') || [];
+
   const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
+    const date = new Date(now);
     date.setDate(date.getDate() - (6 - i));
     return date;
   });
 
-  const workoutsPerDay = last7Days.map(date => {
-    const dateStr = date.toDateString();
-    return completedWorkouts.filter((session: any) => 
-      new Date(session.completedAt).toDateString() === dateStr
-    ).length;
-  });
-
-  const thisWeekWorkouts = completedWorkouts.filter((session: any) => {
-    const sessionDate = new Date(session.completedAt);
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    return sessionDate >= weekAgo;
-  }).length;
-
-  const workoutDays = new Set(
-    completedWorkouts.map((session: any) => {
-      const d = new Date(session.completedAt);
-      d.setHours(0, 0, 0, 0);
-      return d.getTime();
-    })
-  );
-
-  const sortedCompleted = [...completedWorkouts].sort(
-    (a: any, b: any) => (b.completedAt || 0) - (a.completedAt || 0)
-  );
-
-  let currentStreak = 0;
-  if (sortedCompleted.length > 0) {
-    const cursor = new Date(sortedCompleted[0].completedAt ?? 0);
-    cursor.setHours(0, 0, 0, 0);
-    while (workoutDays.has(cursor.getTime())) {
-      currentStreak += 1;
-      cursor.setDate(cursor.getDate() - 1);
-    }
-  }
+  const thisWeekWorkouts = overview?.thisWeekWorkouts ?? 0;
+  const currentStreak = overview?.currentStreak ?? 0;
+  const workoutsPerDay = overview?.workoutsPerDay ?? Array.from({ length: 7 }, () => 0);
 
 
   return (

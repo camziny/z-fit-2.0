@@ -1,4 +1,388 @@
-import { mutation } from './_generated/server';
+import { v } from 'convex/values';
+import type { Id } from './_generated/dataModel';
+import { mutation, type MutationCtx } from './_generated/server';
+
+const DEMO_GROUP_NAME = 'Weekend Warriors';
+const DEMO_CLERK_PREFIX = 'seed_demo_';
+
+type ExerciseSeed = {
+  exerciseId: Id<'exercises'>;
+  exerciseName: string;
+  sets: Array<{ reps: number; weight: number }>;
+};
+
+function completedAtForDaysAgo(daysAgo: number, now: number): number {
+  const date = new Date(now);
+  date.setHours(18, 0, 0, 0);
+  date.setDate(date.getDate() - daysAgo);
+  return date.getTime();
+}
+
+async function insertCompletedWorkout(
+  ctx: MutationCtx,
+  userId: Id<'users'>,
+  completedAt: number,
+  durationMin: number,
+  exercises: ExerciseSeed[],
+  templateId?: Id<'templates'>
+) {
+  const startedAt = completedAt - durationMin * 60 * 1000;
+  await ctx.db.insert('sessions', {
+    userId,
+    templateId,
+    status: 'completed',
+    startedAt,
+    completedAt,
+    exercises: exercises.map((exercise, index) => ({
+      exerciseId: exercise.exerciseId,
+      exerciseName: exercise.exerciseName,
+      order: index + 1,
+      sets: exercise.sets.map((set) => ({
+        reps: set.reps,
+        weight: set.weight,
+        done: true,
+        completedReps: set.reps,
+        completedWeight: set.weight,
+        completedAt,
+      })),
+    })),
+    createdAt: startedAt,
+  });
+}
+
+async function getOrCreateSeedUser(
+  ctx: MutationCtx,
+  clerkUserId: string,
+  displayName: string,
+  now: number
+): Promise<Id<'users'>> {
+  const existing = await ctx.db
+    .query('users')
+    .withIndex('by_clerk_id', (q: any) => q.eq('clerkUserId', clerkUserId))
+    .first();
+  if (existing) {
+    return existing._id;
+  }
+  return await ctx.db.insert('users', {
+    clerkUserId,
+    displayName,
+    createdAt: now,
+  });
+}
+
+export const seedDemoGroup = mutation({
+  args: {
+    ownerMatch: v.string(),
+    recreate: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    message: v.string(),
+    groupId: v.id('groups'),
+    ownerDisplayName: v.string(),
+    members: v.array(v.string()),
+  }),
+  handler: async (ctx, { ownerMatch, recreate }) => {
+    const now = Date.now();
+    const needle = ownerMatch.trim().toLowerCase();
+
+    const allUsers = await ctx.db.query('users').collect();
+    const owner = allUsers.find((user) => {
+      const displayName = (user.displayName ?? '').toLowerCase();
+      const clerkId = user.clerkUserId.toLowerCase();
+      return displayName.includes(needle) || clerkId.includes(needle);
+    });
+
+    if (!owner) {
+      const available = allUsers
+        .map((user) => user.displayName ?? user.clerkUserId)
+        .join(', ');
+      throw new Error(`No user matching "${ownerMatch}". Available: ${available || 'none'}`);
+    }
+
+    const ownerMemberships = await ctx.db
+      .query('groupMembers')
+      .withIndex('by_user', (q) => q.eq('userId', owner._id))
+      .collect();
+
+    for (const membership of ownerMemberships) {
+      const group = await ctx.db.get(membership.groupId);
+      if (group?.name !== DEMO_GROUP_NAME) {
+        continue;
+      }
+
+      if (!recreate) {
+        return {
+          message: 'Demo group already exists',
+          groupId: group._id,
+          ownerDisplayName: owner.displayName ?? 'Athlete',
+          members: ['You', 'Mike', 'Sarah', 'Jake'],
+        };
+      }
+
+      const members = await ctx.db
+        .query('groupMembers')
+        .withIndex('by_group', (q) => q.eq('groupId', group._id))
+        .collect();
+      for (const member of members) {
+        await ctx.db.delete(member._id);
+      }
+
+      const invites = await ctx.db
+        .query('groupInvitations')
+        .withIndex('by_group_status', (q) => q.eq('groupId', group._id).eq('status', 'pending'))
+        .collect();
+      for (const invite of invites) {
+        await ctx.db.delete(invite._id);
+      }
+
+      await ctx.db.delete(group._id);
+    }
+
+    const exercises = await ctx.db.query('exercises').collect();
+    if (exercises.length < 3) {
+      throw new Error('Need at least 3 exercises in the database. Run seedData:initializeApp first.');
+    }
+
+    const benchPress = exercises.find((exercise) => exercise.name === 'Bench Press') ?? exercises[0];
+    const backSquat = exercises.find((exercise) => exercise.name === 'Back Squat') ?? exercises[1];
+    const pullUps = exercises.find((exercise) => exercise.name === 'Pull-ups') ?? exercises[2];
+    const romanianDeadlift =
+      exercises.find((exercise) => exercise.name === 'Romanian Deadlift') ?? exercises[1];
+    const overheadPress =
+      exercises.find((exercise) => exercise.name === 'Overhead Press') ?? exercises[0];
+    const bentOverRows =
+      exercises.find((exercise) => exercise.name === 'Bent-over Rows') ?? exercises[2];
+
+    const allTemplates = await ctx.db.query('templates').collect();
+    const legsTemplate =
+      allTemplates.find((template) => template.name === 'Legs 1 - Squat Focus') ?? allTemplates[0];
+    const chestTemplate =
+      allTemplates.find((template) => template.name === 'Chest 1 - Bench Focus') ?? allTemplates[1];
+    const frontSquatTemplate =
+      allTemplates.find((template) => template.name === 'Legs 2 - Front Squat Focus') ?? legsTemplate;
+
+    if (!legsTemplate || !chestTemplate) {
+      throw new Error('Workout templates not found. Run seedData:initializeApp first.');
+    }
+
+    const mikeId = await getOrCreateSeedUser(ctx, `${DEMO_CLERK_PREFIX}mike`, 'Mike', now);
+    const sarahId = await getOrCreateSeedUser(ctx, `${DEMO_CLERK_PREFIX}sarah`, 'Sarah', now);
+    const jakeId = await getOrCreateSeedUser(ctx, `${DEMO_CLERK_PREFIX}jake`, 'Jake', now);
+
+    const demoUserIds = [mikeId, sarahId, jakeId];
+    for (const userId of demoUserIds) {
+      const sessions = await ctx.db
+        .query('sessions')
+        .withIndex('by_user_started', (q) => q.eq('userId', userId))
+        .collect();
+      for (const session of sessions) {
+        await ctx.db.delete(session._id);
+      }
+    }
+
+    const groupId = await ctx.db.insert('groups', {
+      name: DEMO_GROUP_NAME,
+      createdByUserId: owner._id,
+      createdAt: now,
+    });
+
+    await ctx.db.insert('groupMembers', {
+      groupId,
+      userId: owner._id,
+      role: 'owner',
+      joinedAt: now,
+    });
+
+    for (const memberId of demoUserIds) {
+      await ctx.db.insert('groupMembers', {
+        groupId,
+        userId: memberId,
+        role: 'member',
+        joinedAt: now,
+      });
+    }
+
+    const bench = (weight: number, count = 4) =>
+      Array.from({ length: count }, () => ({ reps: 5, weight }));
+    const squat = (weight: number, count = 3) =>
+      Array.from({ length: count }, () => ({ reps: 8, weight }));
+    const pull = (count = 3) =>
+      Array.from({ length: count }, () => ({ reps: 8, weight: 0 }));
+
+    const mikeWorkouts: Array<{
+      daysAgo: number;
+      durationMin: number;
+      benchWeight: number;
+      squatWeight: number;
+      rdlWeight?: number;
+      ohpWeight?: number;
+      templateId: Id<'templates'>;
+    }> = [
+      { daysAgo: 22, durationMin: 52, benchWeight: 205, squatWeight: 245, rdlWeight: 225, templateId: legsTemplate._id },
+      { daysAgo: 14, durationMin: 55, benchWeight: 225, squatWeight: 275, rdlWeight: 245, templateId: legsTemplate._id },
+      { daysAgo: 7, durationMin: 58, benchWeight: 235, squatWeight: 295, rdlWeight: 255, templateId: frontSquatTemplate._id },
+      { daysAgo: 3, durationMin: 60, benchWeight: 245, squatWeight: 315, rdlWeight: 275, ohpWeight: 115, templateId: legsTemplate._id },
+      { daysAgo: 0, durationMin: 58, benchWeight: 255, squatWeight: 315, rdlWeight: 275, ohpWeight: 120, templateId: legsTemplate._id },
+    ];
+
+    for (const workout of mikeWorkouts) {
+      const exercisesForWorkout: ExerciseSeed[] = [
+        { exerciseId: benchPress._id, exerciseName: benchPress.name, sets: bench(workout.benchWeight, 4) },
+        { exerciseId: backSquat._id, exerciseName: backSquat.name, sets: squat(workout.squatWeight, 4) },
+        { exerciseId: pullUps._id, exerciseName: pullUps.name, sets: pull(3) },
+      ];
+
+      if (workout.rdlWeight !== undefined) {
+        exercisesForWorkout.push({
+          exerciseId: romanianDeadlift._id,
+          exerciseName: romanianDeadlift.name,
+          sets: squat(workout.rdlWeight, 3),
+        });
+      }
+
+      if (workout.ohpWeight !== undefined) {
+        exercisesForWorkout.push({
+          exerciseId: overheadPress._id,
+          exerciseName: overheadPress.name,
+          sets: bench(workout.ohpWeight, 3),
+        });
+      }
+
+      await insertCompletedWorkout(
+        ctx,
+        mikeId,
+        completedAtForDaysAgo(workout.daysAgo, now),
+        workout.durationMin,
+        exercisesForWorkout,
+        workout.templateId
+      );
+    }
+
+    const sarahWorkouts: Array<{
+      daysAgo: number;
+      durationMin: number;
+      benchWeight: number;
+      squatWeight: number;
+      rdlWeight?: number;
+      templateId: Id<'templates'>;
+    }> = [
+      { daysAgo: 20, durationMin: 42, benchWeight: 135, squatWeight: 185, templateId: chestTemplate._id },
+      { daysAgo: 12, durationMin: 44, benchWeight: 145, squatWeight: 205, templateId: legsTemplate._id },
+      { daysAgo: 6, durationMin: 46, benchWeight: 155, squatWeight: 215, rdlWeight: 135, templateId: chestTemplate._id },
+      { daysAgo: 4, durationMin: 45, benchWeight: 165, squatWeight: 225, rdlWeight: 155, templateId: legsTemplate._id },
+      { daysAgo: 3, durationMin: 44, benchWeight: 155, squatWeight: 205, templateId: legsTemplate._id },
+      { daysAgo: 2, durationMin: 48, benchWeight: 155, squatWeight: 205, templateId: legsTemplate._id },
+      { daysAgo: 1, durationMin: 42, benchWeight: 155, squatWeight: 205, templateId: legsTemplate._id },
+      { daysAgo: 0, durationMin: 45, benchWeight: 165, squatWeight: 225, rdlWeight: 165, templateId: legsTemplate._id },
+    ];
+
+    for (const workout of sarahWorkouts) {
+      const exercisesForWorkout: ExerciseSeed[] = [
+        { exerciseId: benchPress._id, exerciseName: benchPress.name, sets: bench(workout.benchWeight, 4) },
+        { exerciseId: backSquat._id, exerciseName: backSquat.name, sets: squat(workout.squatWeight, 3) },
+      ];
+
+      if (workout.rdlWeight !== undefined) {
+        exercisesForWorkout.push({
+          exerciseId: romanianDeadlift._id,
+          exerciseName: romanianDeadlift.name,
+          sets: squat(workout.rdlWeight, 3),
+        });
+      }
+
+      await insertCompletedWorkout(
+        ctx,
+        sarahId,
+        completedAtForDaysAgo(workout.daysAgo, now),
+        workout.durationMin,
+        exercisesForWorkout,
+        workout.templateId
+      );
+    }
+
+    const jakeWorkouts: Array<{
+      daysAgo: number;
+      durationMin: number;
+      squatWeight: number;
+      rowWeight?: number;
+      templateId: Id<'templates'>;
+    }> = [
+      { daysAgo: 12, durationMin: 38, squatWeight: 205, templateId: legsTemplate._id },
+      { daysAgo: 5, durationMin: 35, squatWeight: 225, rowWeight: 155, templateId: legsTemplate._id },
+      { daysAgo: 1, durationMin: 40, squatWeight: 245, rowWeight: 165, templateId: frontSquatTemplate._id },
+    ];
+
+    for (const workout of jakeWorkouts) {
+      const exercisesForWorkout: ExerciseSeed[] = [
+        { exerciseId: backSquat._id, exerciseName: backSquat.name, sets: squat(workout.squatWeight, 3) },
+        { exerciseId: pullUps._id, exerciseName: pullUps.name, sets: pull(4) },
+      ];
+
+      if (workout.rowWeight !== undefined) {
+        exercisesForWorkout.push({
+          exerciseId: bentOverRows._id,
+          exerciseName: bentOverRows.name,
+          sets: bench(workout.rowWeight, 3),
+        });
+      }
+
+      await insertCompletedWorkout(
+        ctx,
+        jakeId,
+        completedAtForDaysAgo(workout.daysAgo, now),
+        workout.durationMin,
+        exercisesForWorkout,
+        workout.templateId
+      );
+    }
+
+    const ownerWorkouts: Array<{
+      daysAgo: number;
+      durationMin: number;
+      benchWeight: number;
+      squatWeight: number;
+      rowWeight?: number;
+      templateId: Id<'templates'>;
+    }> = [
+      { daysAgo: 18, durationMin: 45, benchWeight: 185, squatWeight: 225, templateId: legsTemplate._id },
+      { daysAgo: 10, durationMin: 48, benchWeight: 205, squatWeight: 245, rowWeight: 155, templateId: chestTemplate._id },
+      { daysAgo: 3, durationMin: 52, benchWeight: 215, squatWeight: 255, rowWeight: 165, templateId: legsTemplate._id },
+      { daysAgo: 1, durationMin: 48, benchWeight: 205, squatWeight: 245, templateId: chestTemplate._id },
+      { daysAgo: 0, durationMin: 50, benchWeight: 225, squatWeight: 275, templateId: chestTemplate._id },
+    ];
+
+    for (const workout of ownerWorkouts) {
+      const exercisesForWorkout: ExerciseSeed[] = [
+        { exerciseId: benchPress._id, exerciseName: benchPress.name, sets: bench(workout.benchWeight, 4) },
+        { exerciseId: backSquat._id, exerciseName: backSquat.name, sets: squat(workout.squatWeight, 3) },
+      ];
+
+      if (workout.rowWeight !== undefined) {
+        exercisesForWorkout.push({
+          exerciseId: bentOverRows._id,
+          exerciseName: bentOverRows.name,
+          sets: bench(workout.rowWeight, 3),
+        });
+      }
+
+      await insertCompletedWorkout(
+        ctx,
+        owner._id,
+        completedAtForDaysAgo(workout.daysAgo, now),
+        workout.durationMin,
+        exercisesForWorkout,
+        workout.templateId
+      );
+    }
+
+    return {
+      message: 'Demo group seeded with workout history',
+      groupId,
+      ownerDisplayName: owner.displayName ?? 'Athlete',
+      members: [owner.displayName ?? 'You', 'Mike', 'Sarah', 'Jake'],
+    };
+  },
+});
 
 export const initializeApp = mutation({
   args: {},
