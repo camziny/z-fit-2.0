@@ -1,5 +1,7 @@
 import { v } from 'convex/values';
+import { internal } from './_generated/api';
 import { mutation, query } from './_generated/server';
+import { getCurrentUser } from './lib/auth';
 import { computeNextPlannedWeight } from '../utils/workoutProgression';
 const RECENT_SESSION_LIMIT = 25;
 const SETUP_RECENT_SESSION_LIMIT = 8;
@@ -314,16 +316,26 @@ export const recordExerciseRIR = mutation({
 
 export const completeSession = mutation({
   args: { sessionId: v.id('sessions') },
+  returns: v.boolean(),
   handler: async (ctx, { sessionId }) => {
     const s = await ctx.db.get(sessionId);
     if (!s) throw new Error('Session not found');
     if (s.status === 'completed') return true;
     const allSetsDone = s.exercises.every((ex: any) => ex.sets.every((set: any) => set.done));
     if (!allSetsDone) throw new Error('Cannot complete workout until all sets are saved');
+    const completedAt = Date.now();
     await ctx.db.patch(sessionId, {
       status: 'completed',
-      completedAt: Date.now(),
+      completedAt,
     });
+
+    if (s.userId) {
+      await ctx.scheduler.runAfter(0, internal.notifications.notifyGroupWorkout, {
+        userId: s.userId,
+        sessionId,
+      });
+    }
+
     return true;
   },
 });
@@ -345,10 +357,16 @@ export const cancelSession = mutation({
 
 export const historyForUser = query({
   args: { userId: v.id('users') },
+  returns: v.array(v.any()),
   handler: async (ctx, { userId }) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user._id !== userId) {
+      throw new Error('Unauthorized');
+    }
+
     return await ctx.db
       .query('sessions')
-      .withIndex('by_user_started', q => q.eq('userId', userId))
+      .withIndex('by_user_started', (q) => q.eq('userId', userId))
       .collect();
   },
 });

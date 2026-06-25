@@ -20,15 +20,14 @@ export default function AuthSync() {
         await getOrCreate({
           clerkUserId: user.id,
           displayName: user.fullName ?? user.firstName ?? user.username ?? undefined,
+          imageUrl: user.imageUrl ?? undefined,
         });
         lastSyncedId.current = user.id;
       } catch {}
     };
-    const timer = setTimeout(run, 1000);
-    return () => clearTimeout(timer);
+
+    void run();
   }, [isSignedIn, user, getOrCreate, convexLoading, convexAuthenticated]);
 
   return null;
 }
-
-

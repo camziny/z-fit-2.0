@@ -1,7 +1,9 @@
 import ActiveSessionResume from '@/components/ActiveSessionResume';
+import { AppToastProvider } from '@/components/AppToast';
 import AuthSync from '@/components/AuthSync';
 import WorkoutMutationSync from '@/components/WorkoutMutationSync';
 import WorkoutSummaryPrefetch from '@/components/WorkoutSummaryPrefetch';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { Box, Button, GluestackUIProvider, Text, VStack } from '@gluestack-ui/themed';
@@ -82,8 +84,10 @@ export default function RootLayout() {
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
         <GluestackUIProvider config={theme} colorMode={effectiveColorScheme === 'dark' ? 'dark' : 'light'}>
+          <AppToastProvider>
           <ThemeProvider value={effectiveColorScheme === 'dark' ? DarkTheme : DefaultTheme}>
             <AuthSync />
+            <PushNotificationRegistration />
             <ActiveSessionResume />
             <WorkoutMutationSync />
             <WorkoutSummaryPrefetch />
@@ -144,8 +148,14 @@ export default function RootLayout() {
             </Stack>
             <StatusBar style={effectiveColorScheme === 'dark' ? 'light' : 'dark'} />
           </ThemeProvider>
+          </AppToastProvider>
         </GluestackUIProvider>
       </ConvexProviderWithClerk>
     </ClerkProvider>
   );
+}
+
+function PushNotificationRegistration() {
+  usePushNotifications();
+  return null;
 }

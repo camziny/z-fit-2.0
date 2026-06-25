@@ -1,6 +1,9 @@
+import { api } from '@/convex/_generated/api';
 import { useThemeMode } from '@/hooks/useThemeMode';
 import { useWeightUnit } from '@/hooks/useWeightUnit';
+import { useAuth } from '@clerk/clerk-expo';
 import { Box, HStack, Pressable, Text, VStack } from '@gluestack-ui/themed';
+import { useMutation, useQuery } from 'convex/react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -17,8 +20,29 @@ const weightUnitOptions = [
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const { isSignedIn } = useAuth();
   const { themeMode, setThemeMode } = useThemeMode();
   const { weightUnit, setWeightUnit } = useWeightUnit();
+  const notificationSettings = useQuery(api.notifications.getSettings, isSignedIn ? {} : 'skip');
+  const updateNotificationPrefs = useMutation(api.notifications.updateNotificationPrefs);
+
+  const toggleGroupWorkoutNotifications = async () => {
+    if (!notificationSettings) {
+      return;
+    }
+    await updateNotificationPrefs({
+      notifyOnGroupWorkout: !notificationSettings.notifyOnGroupWorkout,
+    });
+  };
+
+  const toggleWeeklyRecapNotifications = async () => {
+    if (!notificationSettings) {
+      return;
+    }
+    await updateNotificationPrefs({
+      notifyWeeklyRecap: !notificationSettings.notifyWeeklyRecap,
+    });
+  };
 
   return (
     <Box 
@@ -260,6 +284,134 @@ export default function SettingsScreen() {
                 </VStack>
               </VStack>
             </Box>
+
+            {isSignedIn && (
+              <Box
+                bg="$cardLight"
+                sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
+                borderColor="$borderLight0"
+                borderWidth={1}
+                borderRadius={16}
+                p={24}
+              >
+                <VStack space="xl">
+                  <VStack space="sm">
+                    <Text size="lg" fontWeight="$semibold" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }}>
+                      Group Notifications
+                    </Text>
+                    <Text size="sm" color="$textLight200" sx={{ _dark: { color: '$textDark200' } }}>
+                      Stay in the loop with your training groups
+                    </Text>
+                  </VStack>
+
+                  <VStack space="md">
+                    <Pressable onPress={toggleGroupWorkoutNotifications}>
+                      {({ pressed }) => (
+                        <Box
+                          bg={notificationSettings?.notifyOnGroupWorkout ? '$primary0' : 'transparent'}
+                          sx={
+                            notificationSettings?.notifyOnGroupWorkout
+                              ? { _dark: { bg: '$textDark0', borderColor: '$textDark0' } }
+                              : { _dark: { borderColor: '$borderDark0' } }
+                          }
+                          borderColor={notificationSettings?.notifyOnGroupWorkout ? '$primary0' : '$borderLight0'}
+                          borderWidth={2}
+                          borderRadius={12}
+                          p={16}
+                          opacity={pressed ? 0.85 : 1}
+                        >
+                          <HStack justifyContent="space-between" alignItems="center">
+                            <VStack space="xs" flex={1}>
+                              <Text
+                                size="md"
+                                fontWeight="$medium"
+                                color={notificationSettings?.notifyOnGroupWorkout ? '$backgroundLight0' : '$textLight0'}
+                                sx={
+                                  notificationSettings?.notifyOnGroupWorkout
+                                    ? { _dark: { color: '$backgroundDark0' } }
+                                    : { _dark: { color: '$textDark0' } }
+                                }
+                              >
+                                Workout finished
+                              </Text>
+                              <Text
+                                size="xs"
+                                color={notificationSettings?.notifyOnGroupWorkout ? '$backgroundLight0' : '$textLight300'}
+                                sx={
+                                  notificationSettings?.notifyOnGroupWorkout
+                                    ? { _dark: { color: '$backgroundDark0' } }
+                                    : { _dark: { color: '$textDark300' } }
+                                }
+                                opacity={0.9}
+                              >
+                                Notify when a group member completes a workout
+                              </Text>
+                            </VStack>
+                            {notificationSettings?.notifyOnGroupWorkout && (
+                              <Text size="lg" color="$backgroundLight0" sx={{ _dark: { color: '$backgroundDark0' } }} fontWeight="$bold">
+                                ✓
+                              </Text>
+                            )}
+                          </HStack>
+                        </Box>
+                      )}
+                    </Pressable>
+
+                    <Pressable onPress={toggleWeeklyRecapNotifications}>
+                      {({ pressed }) => (
+                        <Box
+                          bg={notificationSettings?.notifyWeeklyRecap ? '$primary0' : 'transparent'}
+                          sx={
+                            notificationSettings?.notifyWeeklyRecap
+                              ? { _dark: { bg: '$textDark0', borderColor: '$textDark0' } }
+                              : { _dark: { borderColor: '$borderDark0' } }
+                          }
+                          borderColor={notificationSettings?.notifyWeeklyRecap ? '$primary0' : '$borderLight0'}
+                          borderWidth={2}
+                          borderRadius={12}
+                          p={16}
+                          opacity={pressed ? 0.85 : 1}
+                        >
+                          <HStack justifyContent="space-between" alignItems="center">
+                            <VStack space="xs" flex={1}>
+                              <Text
+                                size="md"
+                                fontWeight="$medium"
+                                color={notificationSettings?.notifyWeeklyRecap ? '$backgroundLight0' : '$textLight0'}
+                                sx={
+                                  notificationSettings?.notifyWeeklyRecap
+                                    ? { _dark: { color: '$backgroundDark0' } }
+                                    : { _dark: { color: '$textDark0' } }
+                                }
+                              >
+                                Weekly recap
+                              </Text>
+                              <Text
+                                size="xs"
+                                color={notificationSettings?.notifyWeeklyRecap ? '$backgroundLight0' : '$textLight300'}
+                                sx={
+                                  notificationSettings?.notifyWeeklyRecap
+                                    ? { _dark: { color: '$backgroundDark0' } }
+                                    : { _dark: { color: '$textDark300' } }
+                                }
+                                opacity={0.9}
+                              >
+                                Sunday evening summary with the weekly leader
+                              </Text>
+                            </VStack>
+                            {notificationSettings?.notifyWeeklyRecap && (
+                              <Text size="lg" color="$backgroundLight0" sx={{ _dark: { color: '$backgroundDark0' } }} fontWeight="$bold">
+                                ✓
+                              </Text>
+                            )}
+                          </HStack>
+                        </Box>
+                      )}
+                    </Pressable>
+                  </VStack>
+                </VStack>
+              </Box>
+            )}
 
           </VStack>
         </VStack>
