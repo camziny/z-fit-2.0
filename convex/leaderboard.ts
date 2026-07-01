@@ -275,6 +275,6 @@ export const recentActivity = query({
 
     items.sort((a, b) => b.completedAt - a.completedAt);
 
-    return items.slice(0, limit ?? 30);
+    return items.slice(0, limit ?? 12);
   },
 });

@@ -2,6 +2,7 @@ import { useAppToast } from '@/components/AppToast';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { useThemeMode } from '@/hooks/useThemeMode';
+import { useWeightUnit } from '@/hooks/useWeightUnit';
 import { useUser } from '@clerk/clerk-expo';
 import { Ionicons } from '@expo/vector-icons';
 import { Box, HStack, Input, InputField, Pressable, Text, VStack } from '@gluestack-ui/themed';
@@ -43,6 +44,8 @@ type LeaderboardEntry = {
     | { type: 'currentStreak'; lastWorkoutAt: number | null; workedToday: boolean };
 };
 
+const DETAIL_LIMIT = 3;
+
 const metricOptions: {
   value: LeaderboardMetric;
   label: string;
@@ -50,9 +53,9 @@ const metricOptions: {
   unit: string;
   expandable: boolean;
 }[] = [
-  { value: 'prsThisMonth', label: 'PRs', caption: 'Personal records this month', unit: 'PRs', expandable: true },
-  { value: 'workoutsThisWeek', label: 'Workouts', caption: 'Sessions in the last 7 days', unit: 'sessions', expandable: true },
-  { value: 'currentStreak', label: 'Streak', caption: 'Consecutive training days', unit: 'days', expandable: false },
+  { value: 'prsThisMonth', label: 'PRs', caption: 'This month', unit: 'PRs', expandable: true },
+  { value: 'workoutsThisWeek', label: 'Workouts', caption: 'Last 7 days', unit: 'sessions', expandable: true },
+  { value: 'currentStreak', label: 'Streak', caption: 'Consecutive days', unit: 'days', expandable: false },
 ];
 
 function formatRelativeDay(timestamp: number, now: number): string {
@@ -78,11 +81,46 @@ function formatActivityTime(timestamp: number, now: number): string {
   return formatRelativeDay(timestamp, now);
 }
 
-function getHighlight(entry: LeaderboardEntry, now: number): string {
+function capPrs(prs: PrDetail[]) {
+  const sorted = [...prs].sort((a, b) => {
+    if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+    return b.completedAt - a.completedAt;
+  });
+  return { visible: sorted.slice(0, DETAIL_LIMIT), overflow: Math.max(0, sorted.length - DETAIL_LIMIT) };
+}
+
+function capWorkouts(workouts: WorkoutDetail[]) {
+  return { visible: workouts.slice(0, DETAIL_LIMIT), overflow: Math.max(0, workouts.length - DETAIL_LIMIT) };
+}
+
+function getTopLift(exercises: ActivityExercise[]): ActivityExercise | null {
+  const primary = exercises.filter((e) => e.isPrimary && e.weighted);
+  const pool = primary.length > 0 ? primary : exercises.filter((e) => e.weighted);
+  if (pool.length === 0) return null;
+  return pool.reduce((best, e) => (e.weight > best.weight ? e : best));
+}
+
+function getExpandedActivityExercises(exercises: ActivityExercise[]): ActivityExercise[] {
+  return exercises.filter((e) => e.isPrimary && e.weighted).slice(0, DETAIL_LIMIT);
+}
+
+function formatSetLine(
+  exercise: ActivityExercise,
+  formatStoredWeight: (weightKg: number) => string
+): string {
+  if (!exercise.weighted) return `${exercise.reps} reps`;
+  return `${formatStoredWeight(exercise.weight)} × ${exercise.reps}`;
+}
+
+function getHighlight(
+  entry: LeaderboardEntry,
+  now: number,
+  formatStoredWeight: (weightKg: number) => string
+): string {
   if (entry.detail.type === 'prsThisMonth') {
     if (entry.detail.prs.length === 0) return 'No new PRs';
-    const top = entry.detail.prs[0];
-    return `${top.exerciseName} · ${top.weight} lb`;
+    const top = capPrs(entry.detail.prs).visible[0];
+    return `${top.exerciseName} · ${formatStoredWeight(top.weight)}`;
   }
   if (entry.detail.type === 'workoutsThisWeek') {
     if (entry.detail.workouts.length === 0) return 'No workouts yet';
@@ -94,8 +132,8 @@ function getHighlight(entry: LeaderboardEntry, now: number): string {
 }
 
 function hasExpandableDetail(entry: LeaderboardEntry): boolean {
-  if (entry.detail.type === 'prsThisMonth') return entry.detail.prs.length > 0;
-  if (entry.detail.type === 'workoutsThisWeek') return entry.detail.workouts.length > 0;
+  if (entry.detail.type === 'prsThisMonth') return capPrs(entry.detail.prs).overflow > 0;
+  if (entry.detail.type === 'workoutsThisWeek') return capWorkouts(entry.detail.workouts).overflow > 0;
   return false;
 }
 
@@ -144,11 +182,20 @@ function Avatar({
   );
 }
 
-function ExpandedDetail({ entry, now }: { entry: LeaderboardEntry; now: number }) {
+function ExpandedDetail({
+  entry,
+  now,
+  formatStoredWeight,
+}: {
+  entry: LeaderboardEntry;
+  now: number;
+  formatStoredWeight: (weightKg: number) => string;
+}) {
   if (entry.detail.type === 'prsThisMonth') {
+    const { visible, overflow } = capPrs(entry.detail.prs);
     return (
       <VStack space="md">
-        {entry.detail.prs.map((pr, index) => (
+        {visible.map((pr, index) => (
           <HStack key={`${pr.exerciseName}-${pr.completedAt}-${index}`} alignItems="center" justifyContent="space-between">
             <HStack space="sm" alignItems="center" flex={1}>
               <Box
@@ -170,7 +217,7 @@ function ExpandedDetail({ entry, now }: { entry: LeaderboardEntry; now: number }
             </HStack>
             <HStack space="md" alignItems="center">
               <Text size="sm" fontWeight="$bold" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }}>
-                {pr.weight} lb
+                {formatStoredWeight(pr.weight)}
               </Text>
               <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} w={60} textAlign="right">
                 {formatRelativeDay(pr.completedAt, now)}
@@ -178,14 +225,20 @@ function ExpandedDetail({ entry, now }: { entry: LeaderboardEntry; now: number }
             </HStack>
           </HStack>
         ))}
+        {overflow > 0 && (
+          <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
+            +{overflow} more PR{overflow === 1 ? '' : 's'}
+          </Text>
+        )}
       </VStack>
     );
   }
 
   if (entry.detail.type === 'workoutsThisWeek') {
+    const { visible, overflow } = capWorkouts(entry.detail.workouts);
     return (
       <VStack space="md">
-        {entry.detail.workouts.map((workout) => (
+        {visible.map((workout) => (
           <HStack key={workout.completedAt} alignItems="center" justifyContent="space-between" space="md">
             <Text
               size="sm"
@@ -202,6 +255,11 @@ function ExpandedDetail({ entry, now }: { entry: LeaderboardEntry; now: number }
             </Text>
           </HStack>
         ))}
+        {overflow > 0 && (
+          <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
+            +{overflow} more workout{overflow === 1 ? '' : 's'}
+          </Text>
+        )}
       </VStack>
     );
   }
@@ -209,11 +267,31 @@ function ExpandedDetail({ entry, now }: { entry: LeaderboardEntry; now: number }
   return null;
 }
 
-function ActivityCard({ item, now, mutedIcon }: { item: ActivityItem; now: number; mutedIcon: string }) {
+function ActivityCard({
+  item,
+  now,
+  mutedIcon,
+  formatStoredWeight,
+}: {
+  item: ActivityItem;
+  now: number;
+  mutedIcon: string;
+  formatStoredWeight: (weightKg: number) => string;
+}) {
   const [expanded, setExpanded] = useState(false);
   const initial = (item.displayName.trim()[0] ?? 'A').toUpperCase();
-  const canExpand = item.exercises.length > 0;
   const name = item.isCurrentUser ? 'You' : item.displayName;
+  const topLift = getTopLift(item.exercises);
+  const expandedExercises = getExpandedActivityExercises(item.exercises);
+  const canExpand = expandedExercises.length > 1;
+
+  const subtitleParts = [
+    formatActivityTime(item.completedAt, now),
+    `${item.setCount} set${item.setCount === 1 ? '' : 's'}`,
+  ];
+  if (topLift) {
+    subtitleParts.push(`${topLift.exerciseName} ${formatSetLine(topLift, formatStoredWeight)}`);
+  }
 
   return (
     <Pressable onPress={() => canExpand && setExpanded((prev) => !prev)}>
@@ -223,8 +301,7 @@ function ActivityCard({ item, now, mutedIcon }: { item: ActivityItem; now: numbe
           sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
           borderColor="$borderLight0"
           borderWidth={1}
-          borderRadius={18}
-          style={styles.card}
+          borderRadius={16}
           px={16}
           py={14}
           opacity={canExpand && pressed ? 0.92 : 1}
@@ -242,8 +319,8 @@ function ActivityCard({ item, now, mutedIcon }: { item: ActivityItem; now: numbe
                   {item.title}
                 </Text>
               </Text>
-              <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} numberOfLines={1}>
-                {formatActivityTime(item.completedAt, now)} · {item.setCount} set{item.setCount === 1 ? '' : 's'}
+              <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} numberOfLines={2}>
+                {subtitleParts.join(' · ')}
               </Text>
             </VStack>
 
@@ -261,20 +338,19 @@ function ActivityCard({ item, now, mutedIcon }: { item: ActivityItem; now: numbe
               sx={{ _dark: { borderColor: '$borderDark0' } }}
             >
               <VStack space="md">
-                {item.exercises.map((exercise, index) => (
+                {expandedExercises.map((exercise, index) => (
                   <HStack key={`${exercise.exerciseName}-${index}`} alignItems="center" justifyContent="space-between" space="md">
                     <Text
                       size="sm"
-                      fontWeight={exercise.isPrimary ? '$semibold' : '$normal'}
-                      color={exercise.isPrimary ? '$textLight0' : '$textLight200'}
-                      sx={{ _dark: { color: exercise.isPrimary ? '$textDark0' : '$textDark200' } }}
+                      color="$textLight0"
+                      sx={{ _dark: { color: '$textDark0' } }}
                       flex={1}
                       numberOfLines={1}
                     >
                       {exercise.exerciseName}
                     </Text>
-                    <Text size="sm" fontWeight="$bold" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }}>
-                      {exercise.weighted ? `${exercise.weight} lb × ${exercise.reps}` : `${exercise.reps} reps`}
+                    <Text size="sm" fontWeight="$medium" color="$textLight200" sx={{ _dark: { color: '$textDark200' } }}>
+                      {formatSetLine(exercise, formatStoredWeight)}
                     </Text>
                   </HStack>
                 ))}
@@ -292,14 +368,20 @@ export default function GroupLeaderboardScreen() {
   const isDark = effectiveColorScheme === 'dark';
   const { showToast } = useAppToast();
   const { isSignedIn, user } = useUser();
+  const { weightUnit, convertWeight, formatWeight } = useWeightUnit();
   const convexUser = useQuery(api.users.me, isSignedIn && user ? { clerkUserId: user.id } : 'skip');
+
+  const formatStoredWeight = useMemo(
+    () => (weightKg: number) => formatWeight(convertWeight(weightKg, 'kg', weightUnit)),
+    [convertWeight, formatWeight, weightUnit]
+  );
 
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const isValidGroupId = Boolean(groupId && groupId !== 'index');
   const parsedGroupId = isValidGroupId ? (groupId as Id<'groups'>) : undefined;
 
   const [view, setView] = useState<GroupView>('leaderboard');
-  const [metric, setMetric] = useState<LeaderboardMetric>('prsThisMonth');
+  const [metric, setMetric] = useState<LeaderboardMetric>('workoutsThisWeek');
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showInvite, setShowInvite] = useState(false);
@@ -308,7 +390,6 @@ export default function GroupLeaderboardScreen() {
   const timezoneOffsetMinutes = useMemo(() => new Date().getTimezoneOffset(), []);
 
   const mutedIcon = isDark ? '#6C757D' : '#ADB5BD';
-  const headerIcon = isDark ? '#F8F9FA' : '#212529';
 
   useEffect(() => {
     if (groupId === 'index') {
@@ -340,7 +421,6 @@ export default function GroupLeaderboardScreen() {
 
   const selectedMetric = metricOptions.find((option) => option.value === metric) ?? metricOptions[0];
   const filteredSearchResults = searchResults?.filter((result) => !convexUser || result.userId !== convexUser._id);
-  const memberCount = leaderboard?.length ?? 0;
 
   const handleSelectView = (next: GroupView) => {
     setView(next);
@@ -393,13 +473,6 @@ export default function GroupLeaderboardScreen() {
     ]);
   };
 
-  const openMenu = () => {
-    Alert.alert(group?.name ?? 'Group', undefined, [
-      { text: 'Leave group', style: 'destructive', onPress: handleLeave },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
-  };
-
   if (group === null) {
     return (
       <Box flex={1} bg="$backgroundLight0" sx={{ _dark: { bg: '$backgroundDark0' } }} p={24} justifyContent="center">
@@ -413,29 +486,9 @@ export default function GroupLeaderboardScreen() {
 
   return (
     <Box bg="$backgroundLight0" sx={{ _dark: { bg: '$backgroundDark0' } }} flex={1}>
-      <Stack.Screen
-        options={{
-          title: group?.name ?? 'Group',
-          headerRight: () => (
-            <HStack space="lg" alignItems="center" pr={4}>
-              <Pressable
-                hitSlop={8}
-                onPress={() => {
-                  setShowInvite((prev) => !prev);
-                  setSearchQuery('');
-                }}
-              >
-                <Ionicons name="person-add-outline" size={22} color={headerIcon} />
-              </Pressable>
-              <Pressable hitSlop={8} onPress={openMenu}>
-                <Ionicons name="ellipsis-horizontal" size={22} color={headerIcon} />
-              </Pressable>
-            </HStack>
-          ),
-        }}
-      />
+      <Stack.Screen options={{ title: group?.name ?? 'Group' }} />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <VStack space="lg" p={20} pb={140}>
+        <VStack space="xl" p={20} pb={140}>
           <HStack space="xl" px={4} borderBottomWidth={1} borderColor="$borderLight0" sx={{ _dark: { borderColor: '$borderDark0' } }}>
             {(['leaderboard', 'activity'] as GroupView[]).map((tab) => {
               const active = view === tab;
@@ -462,62 +515,81 @@ export default function GroupLeaderboardScreen() {
             })}
           </HStack>
 
-          {view === 'leaderboard' && (
-            <>
-            <Box
-              bg="$backgroundLight100"
-              sx={{ _dark: { bg: '$backgroundDark100' } }}
-              borderRadius={14}
-              p={4}
+          <HStack alignItems="center" justifyContent="space-between" px={4}>
+            <Pressable
+              hitSlop={8}
+              onPress={() => {
+                setShowInvite((prev) => !prev);
+                setSearchQuery('');
+              }}
             >
-              <HStack space="xs">
-                {metricOptions.map((option) => {
-                const active = metric === option.value;
-                return (
-                  <Pressable key={option.value} flex={1} onPress={() => handleSelectMetric(option.value)}>
-                    <Box
-                      bg={active ? '$cardLight' : 'transparent'}
-                      sx={{ _dark: { bg: active ? '$cardDark' : 'transparent' } }}
-                      style={active ? styles.segmentShadow : undefined}
-                      borderRadius={10}
-                      h={38}
-                      justifyContent="center"
-                      alignItems="center"
-                    >
-                      <Text
-                        size="sm"
-                        fontWeight={active ? '$bold' : '$medium'}
-                        color={active ? '$textLight0' : '$textLight300'}
-                        sx={{ _dark: { color: active ? '$textDark0' : '$textDark300' } }}
-                      >
-                        {option.label}
-                      </Text>
-                    </Box>
-                  </Pressable>
-                );
-              })}
-            </HStack>
-          </Box>
-
-              <HStack alignItems="center" justifyContent="space-between" px={4}>
-                <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                  {selectedMetric.caption}
+              {({ pressed }) => (
+                <Text
+                  size="sm"
+                  fontWeight="$medium"
+                  color="$primary0"
+                  sx={{ _dark: { color: '$textDark0' } }}
+                  opacity={pressed ? 0.7 : 1}
+                >
+                  Invite friends
                 </Text>
-                {memberCount > 0 && (
-                  <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                    {memberCount} member{memberCount === 1 ? '' : 's'}
-                  </Text>
-                )}
-              </HStack>
-            </>
+              )}
+            </Pressable>
+            <Pressable hitSlop={8} onPress={handleLeave}>
+              {({ pressed }) => (
+                <Text size="sm" fontWeight="$medium" color="$error500" opacity={pressed ? 0.7 : 1}>
+                  Leave group
+                </Text>
+              )}
+            </Pressable>
+          </HStack>
+
+          {view === 'leaderboard' && (
+            <VStack space="md">
+              <Box
+                bg="$backgroundLight100"
+                sx={{ _dark: { bg: '$backgroundDark100' } }}
+                borderRadius={12}
+                p={3}
+              >
+                <HStack space="xs">
+                  {metricOptions.map((option) => {
+                    const active = metric === option.value;
+                    return (
+                      <Pressable key={option.value} flex={1} onPress={() => handleSelectMetric(option.value)}>
+                        <Box
+                          bg={active ? '$cardLight' : 'transparent'}
+                          sx={{ _dark: { bg: active ? '$cardDark' : 'transparent' } }}
+                          borderRadius={9}
+                          h={36}
+                          justifyContent="center"
+                          alignItems="center"
+                        >
+                          <Text
+                            size="sm"
+                            fontWeight={active ? '$bold' : '$medium'}
+                            color={active ? '$textLight0' : '$textLight300'}
+                            sx={{ _dark: { color: active ? '$textDark0' : '$textDark300' } }}
+                          >
+                            {option.label}
+                          </Text>
+                        </Box>
+                      </Pressable>
+                    );
+                  })}
+                </HStack>
+              </Box>
+
+              <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} px={4}>
+                {selectedMetric.caption}
+              </Text>
+            </VStack>
           )}
 
           {view === 'activity' && (
-            <HStack alignItems="center" justifyContent="space-between" px={4}>
-              <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }}>
-                Latest workouts from your group
-              </Text>
-            </HStack>
+            <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} px={4}>
+              Recent workouts
+            </Text>
           )}
 
           {showInvite && (
@@ -526,8 +598,7 @@ export default function GroupLeaderboardScreen() {
               sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
               borderColor="$borderLight0"
               borderWidth={1}
-              borderRadius={18}
-              style={styles.card}
+              borderRadius={16}
               p={18}
             >
               <VStack space="md">
@@ -568,23 +639,29 @@ export default function GroupLeaderboardScreen() {
                   </Text>
                 )}
                 {filteredSearchResults?.map((result) => (
-                  <HStack key={result.userId} justifyContent="space-between" alignItems="center" py={2}>
-                    <Text size="md" fontWeight="$medium" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }} flex={1} numberOfLines={1}>
+                  <HStack key={result.userId} justifyContent="space-between" alignItems="center" py={4} space="md">
+                    <Text size="md" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }} flex={1} numberOfLines={1}>
                       {result.displayName}
                     </Text>
-                    <Pressable disabled={invitingUserId === result.userId} onPress={() => handleInvite(result.userId, result.displayName)}>
+                    <Pressable
+                      flexShrink={0}
+                      disabled={invitingUserId === result.userId}
+                      onPress={() => handleInvite(result.userId, result.displayName)}
+                    >
                       {({ pressed }) => (
                         <Box
-                          bg="$primary0"
-                          sx={{ _dark: { bg: '$textDark0' } }}
+                          borderColor="$borderLight0"
+                          sx={{ _dark: { borderColor: '$borderDark0' } }}
+                          borderWidth={1}
                           borderRadius={10}
-                          h={34}
+                          h={36}
+                          minWidth={72}
                           px={16}
                           justifyContent="center"
                           alignItems="center"
-                          opacity={invitingUserId === result.userId ? 0.5 : pressed ? 0.85 : 1}
+                          opacity={invitingUserId === result.userId ? 0.5 : pressed ? 0.7 : 1}
                         >
-                          <Text color="$backgroundLight0" sx={{ _dark: { color: '$backgroundDark0' } }} fontWeight="$semibold" size="sm">
+                          <Text color="$textLight0" sx={{ _dark: { color: '$textDark0' } }} fontWeight="$medium" size="sm">
                             Invite
                           </Text>
                         </Box>
@@ -613,132 +690,125 @@ export default function GroupLeaderboardScreen() {
 
           {view === 'leaderboard' ? (
             leaderboard === undefined ? (
-            <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} px={4}>
-              Loading…
-            </Text>
-          ) : leaderboard.length === 0 ? (
-            <Box
-              bg="$cardLight"
-              sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
-              borderColor="$borderLight0"
-              borderWidth={1}
-              borderRadius={20}
-              style={styles.card}
-              p={32}
-            >
-              <VStack space="md" alignItems="center">
-                <Ionicons name="trophy-outline" size={30} color={mutedIcon} />
-                <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} textAlign="center">
-                  Invite friends to start competing
-                </Text>
-                <Pressable onPress={() => setShowInvite(true)}>
-                  {({ pressed }) => (
-                    <Box
-                      bg="$primary0"
-                      sx={{ _dark: { bg: '$textDark0' } }}
-                      borderRadius={12}
-                      h={44}
-                      px={24}
-                      justifyContent="center"
-                      alignItems="center"
-                      opacity={pressed ? 0.85 : 1}
-                    >
-                      <Text color="$backgroundLight0" sx={{ _dark: { color: '$backgroundDark0' } }} fontWeight="$semibold" size="sm">
+              <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} px={4}>
+                Loading…
+              </Text>
+            ) : leaderboard.length === 0 ? (
+              <Box
+                bg="$cardLight"
+                sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
+                borderColor="$borderLight0"
+                borderWidth={1}
+                borderRadius={16}
+                p={32}
+              >
+                <VStack space="md" alignItems="center">
+                  <Ionicons name="trophy-outline" size={30} color={mutedIcon} />
+                  <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} textAlign="center">
+                    Invite friends to start competing
+                  </Text>
+                  <Pressable onPress={() => setShowInvite(true)}>
+                    {({ pressed }) => (
+                      <Text
+                        size="sm"
+                        fontWeight="$medium"
+                        color="$primary0"
+                        sx={{ _dark: { color: '$textDark0' } }}
+                        opacity={pressed ? 0.7 : 1}
+                      >
                         Invite friends
                       </Text>
-                    </Box>
-                  )}
-                </Pressable>
-              </VStack>
-            </Box>
-          ) : (
-            <VStack space="sm">
-              {leaderboard.map((entry) => {
-                const isLeader = entry.rank === 1 && entry.value > 0;
-                const expanded = expandedUserId === String(entry.userId);
-                const canExpand = selectedMetric.expandable && hasExpandableDetail(entry);
-                const initial = (entry.displayName.trim()[0] ?? 'A').toUpperCase();
-
-                return (
-                  <Pressable key={entry.userId} onPress={() => handleToggleExpand(entry)}>
-                    {({ pressed }) => (
-                      <Box
-                        bg="$cardLight"
-                        sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
-                        borderColor="$borderLight0"
-                        borderWidth={1}
-                        borderRadius={18}
-                        style={styles.card}
-                        px={16}
-                        py={14}
-                        opacity={canExpand && pressed ? 0.92 : 1}
-                      >
-                        <HStack alignItems="center" space="md">
-                          <Box w={20} alignItems="center">
-                            <Text
-                              size="md"
-                              fontWeight="$bold"
-                              color={isLeader ? '$textLight0' : '$textLight300'}
-                              sx={{ _dark: { color: isLeader ? '$textDark0' : '$textDark300' } }}
-                            >
-                              {entry.rank}
-                            </Text>
-                          </Box>
-
-                          <Avatar
-                            size={46}
-                            imageUrl={entry.imageUrl}
-                            initial={initial}
-                            variant={isLeader ? 'leader' : 'default'}
-                          />
-
-                          <VStack flex={1} space="xs">
-                            <Text
-                              size="md"
-                              fontWeight="$semibold"
-                              color="$textLight0"
-                              sx={{ _dark: { color: '$textDark0' } }}
-                              numberOfLines={1}
-                            >
-                              {entry.displayName}
-                              {entry.isCurrentUser ? ' (You)' : ''}
-                            </Text>
-                            <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} numberOfLines={1}>
-                              {getHighlight(entry, now)}
-                            </Text>
-                          </VStack>
-
-                          <VStack alignItems="flex-end" space="xs" minWidth={48}>
-                            <Text size="2xl" fontWeight="$bold" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }} lineHeight={26}>
-                              {entry.value}
-                            </Text>
-                            <Text size="2xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} textTransform="uppercase" letterSpacing={0.5}>
-                              {selectedMetric.unit}
-                            </Text>
-                          </VStack>
-
-                          {canExpand && (
-                            <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={mutedIcon} />
-                          )}
-                        </HStack>
-
-                        {expanded && canExpand && (
-                          <Box
-                            mt={14}
-                            pt={14}
-                            borderTopWidth={1}
-                            borderColor="$borderLight0"
-                            sx={{ _dark: { borderColor: '$borderDark0' } }}
-                          >
-                            <ExpandedDetail entry={entry} now={now} />
-                          </Box>
-                        )}
-                      </Box>
                     )}
                   </Pressable>
-                );
-              })}
-            </VStack>
+                </VStack>
+              </Box>
+            ) : (
+              <VStack space="sm">
+                {leaderboard.map((entry) => {
+                  const isLeader = entry.rank === 1 && entry.value > 0;
+                  const expanded = expandedUserId === String(entry.userId);
+                  const canExpand = selectedMetric.expandable && hasExpandableDetail(entry);
+                  const initial = (entry.displayName.trim()[0] ?? 'A').toUpperCase();
+
+                  return (
+                    <Pressable key={entry.userId} onPress={() => handleToggleExpand(entry)}>
+                      {({ pressed }) => (
+                        <Box
+                          bg="$cardLight"
+                          sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
+                          borderColor="$borderLight0"
+                          borderWidth={1}
+                          borderRadius={16}
+                          px={16}
+                          py={14}
+                          opacity={canExpand && pressed ? 0.92 : 1}
+                        >
+                          <HStack alignItems="center" space="md">
+                            <Box w={20} alignItems="center">
+                              <Text
+                                size="md"
+                                fontWeight="$bold"
+                                color={isLeader ? '$textLight0' : '$textLight300'}
+                                sx={{ _dark: { color: isLeader ? '$textDark0' : '$textDark300' } }}
+                              >
+                                {entry.rank}
+                              </Text>
+                            </Box>
+
+                            <Avatar
+                              size={46}
+                              imageUrl={entry.imageUrl}
+                              initial={initial}
+                              variant={isLeader ? 'leader' : 'default'}
+                            />
+
+                            <VStack flex={1} space="xs">
+                              <Text
+                                size="md"
+                                fontWeight="$semibold"
+                                color="$textLight0"
+                                sx={{ _dark: { color: '$textDark0' } }}
+                                numberOfLines={1}
+                              >
+                                {entry.displayName}
+                                {entry.isCurrentUser ? ' (You)' : ''}
+                              </Text>
+                              <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} numberOfLines={1}>
+                                {getHighlight(entry, now, formatStoredWeight)}
+                              </Text>
+                            </VStack>
+
+                            <VStack alignItems="flex-end" space="xs" minWidth={48}>
+                              <Text size="2xl" fontWeight="$bold" color="$textLight0" sx={{ _dark: { color: '$textDark0' } }} lineHeight={26}>
+                                {entry.value}
+                              </Text>
+                              <Text size="2xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} textTransform="uppercase" letterSpacing={0.5}>
+                                {selectedMetric.unit}
+                              </Text>
+                            </VStack>
+
+                            {canExpand && (
+                              <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={mutedIcon} />
+                            )}
+                          </HStack>
+
+                          {expanded && canExpand && (
+                            <Box
+                              mt={14}
+                              pt={14}
+                              borderTopWidth={1}
+                              borderColor="$borderLight0"
+                              sx={{ _dark: { borderColor: '$borderDark0' } }}
+                            >
+                              <ExpandedDetail entry={entry} now={now} formatStoredWeight={formatStoredWeight} />
+                            </Box>
+                          )}
+                        </Box>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </VStack>
             )
           ) : activity === undefined ? (
             <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} px={4}>
@@ -750,8 +820,7 @@ export default function GroupLeaderboardScreen() {
               sx={{ _dark: { bg: '$cardDark', borderColor: '$borderDark0' } }}
               borderColor="$borderLight0"
               borderWidth={1}
-              borderRadius={20}
-              style={styles.card}
+              borderRadius={16}
               p={32}
             >
               <VStack space="md" alignItems="center">
@@ -759,15 +828,18 @@ export default function GroupLeaderboardScreen() {
                 <Text size="sm" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} textAlign="center">
                   No recent activity yet
                 </Text>
-                <Text size="xs" color="$textLight300" sx={{ _dark: { color: '$textDark300' } }} textAlign="center">
-                  Completed workouts from the group will show up here
-                </Text>
               </VStack>
             </Box>
           ) : (
             <VStack space="sm">
               {activity.map((item) => (
-                <ActivityCard key={item.sessionId} item={item} now={now} mutedIcon={mutedIcon} />
+                <ActivityCard
+                  key={item.sessionId}
+                  item={item}
+                  now={now}
+                  mutedIcon={mutedIcon}
+                  formatStoredWeight={formatStoredWeight}
+                />
               ))}
             </VStack>
           )}
@@ -780,19 +852,5 @@ export default function GroupLeaderboardScreen() {
 const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
-  },
-  card: {
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
-  },
-  segmentShadow: {
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
   },
 });
